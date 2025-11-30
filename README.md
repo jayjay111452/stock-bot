@@ -1,6 +1,7 @@
 st.title("📈 Stock-Bot：你的美股 AI 分析师")
     
-    st.markdown("""
+网页版已上线：https://stock-bot-jbz8eeyers25wnkkvytouy.streamlit.app
+
     ### 💡 为什么使用这个工具？
     面对海量财经资讯，**Stock-Bot** 帮你去粗取精。我们利用自动化技术追踪市场动态，助你判断市场。
     
