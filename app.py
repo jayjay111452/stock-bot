@@ -7,8 +7,8 @@ from urllib.parse import quote
 import google.generativeai as genai
 
 # === 页面设置 ===
-st.set_page_config(page_title="美股AI内参", page_icon="📈")
-st.title("📈 华尔街宏观对冲雷达")
+st.set_page_config(page_title="美股AI分析师", page_icon="📈")
+st.title("📈 美股AI分析师")
 st.caption("Powered by Google Gemini 2.5 & Yahoo Finance")
 
 # === 侧边栏：API Key 配置 ===
