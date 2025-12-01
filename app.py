@@ -20,25 +20,28 @@ with st.sidebar:
 # === 核心逻辑：资产分组清单 ===
 WATCHLIST_GROUPS = {
     "🚀 市场总览": {
-        "^GSPC":   ["标普500", "S&P 500 market analysis"],
-        "^IXIC":   ["纳斯达克", "Nasdaq Composite analysis"],
-        "^RUT":    ["罗素2000 (实体经济)", "Russell 2000 small cap stocks"],
-        "^VIX":    ["VIX恐慌指数", "CBOE VIX volatility index"],
+        "^GSPC":   ["标普500 (美股基准)", "S&P 500 market analysis"],
+        "^IXIC":   ["纳斯达克 (科技风向)", "Nasdaq Composite analysis"],
+        "^DJI":    ["道琼斯 (传统蓝筹)", "Dow Jones Industrial Average news"],
+        "^RUT":    ["罗素2000 (美国实体经济)", "Russell 2000 small cap stocks"],
+        "^VIX":    ["VIX 恐慌指数", "CBOE VIX volatility index market fear"],
+        "^VXN":    ["纳指恐慌指数", "Nasdaq Volatility Index"],
     },
     "👑 科技七巨头": {
-        "NVDA":    ["英伟达", "Nvidia stock news"],
-        "MSFT":    ["微软", "Microsoft stock AI"],
-        "AAPL":    ["苹果", "Apple Inc stock news"],
-        "GOOGL":   ["谷歌", "Alphabet Google stock"],
-        "AMZN":    ["亚马逊", "Amazon stock news"],
-        "META":    ["Meta", "Meta Platforms news"],
-        "TSLA":    ["特斯拉", "Tesla stock news"],
+        "NVDA":    ["英伟达 (AI算力)", "Nvidia stock news"],
+        "MSFT":    ["微软 (AI应用)", "Microsoft stock AI news"],
+        "AAPL":    ["苹果 (消费电子)", "Apple Inc stock news"],
+        "GOOGL":   ["谷歌 (搜索/AI)", "Alphabet Google stock news"],
+        "AMZN":    ["亚马逊 (云/电商)", "Amazon stock news"],
+        "META":    ["Meta (社交/广告)", "Meta Platforms stock news"],
+        "TSLA":    ["特斯拉 (电车/机器人)", "Tesla stock news"],
     },
     "⚙️ 硬核半导体": {
-        "TSM":     ["台积电", "TSMC stock news"],
-        "ASML":    ["ASML", "ASML stock lithography"],
-        "AVGO":    ["博通", "Broadcom stock news"],
-        "AMD":     ["AMD", "AMD stock news"],
+        "TSM":     ["台积电 (代工霸主)", "TSMC stock news"],
+        "ASML":    ["ASML (光刻机)", "ASML stock lithography"],
+        "AVGO":    ["博通 (网络芯片)", "Broadcom stock news"],
+        "AMD":     ["AMD (算力老二)", "AMD stock news"],
+        "MU":      ["美光 (存储芯片)", "Micron Technology stock news"],
         "SMH":     ["半导体ETF", "VanEck Vectors Semiconductor ETF"],
     },
     "💰 宏观流动性": {
@@ -46,40 +49,59 @@ WATCHLIST_GROUPS = {
         "DX-Y.NYB": ["美元指数", "US Dollar index"],
         "JPY=X":   ["美元兑日元", "USD JPY exchange rate"],
         "TLT":     ["20年+美债", "iShares 20+ Year Treasury Bond ETF"],
-    },
-    "🚨 信用与避险": {
-        "HYG":     ["高收益债(垃圾债)", "High Yield Corporate Bond ETF default risk"],
-        "GLD":     ["黄金", "Gold price investing"],
         "BTC-USD": ["比特币", "Bitcoin crypto market sentiment"],
     },
+    "🚨 信用与避险": {
+        "HYG":     ["高收益债ETF (垃圾债)", "High Yield Corporate Bond ETF default risk"], # 关键：跌则衰退风险增
+        "LQD":     ["投资级债ETF", "Investment Grade Corporate Bond ETF"],
+        "GLD":     ["黄金ETF (终极避险)", "Gold price investing safe haven"],
+        "SLV":     ["白银ETF", "Silver price investing"],
+    },
     "🏭 周期与通胀": {
-        "CL=F":    ["原油", "Crude oil price energy"],
-        "XLE":     ["能源板块", "US Energy Sector ETF"],
-        "XLF":     ["金融板块", "US Financials Sector ETF"],
-        "CAT":     ["卡特彼勒", "Caterpillar stock economy"],
+        "CL=F":    ["原油期货 (通胀源头)", "Crude oil price energy news"],
+        "XLE":     ["能源板块ETF", "US Energy Sector ETF"],
+        "XLF":     ["金融板块 (银行)", "US Financials Sector ETF bank earnings"],
+        "XLI":     ["工业板块", "US Industrials Sector ETF economy"],
+        "CAT":     ["卡特彼勒 (工业风向)", "Caterpillar stock economy"],
+        "JETS":    ["航空ETF (地缘/消费)", "U.S. Global Jets ETF travel demand"],
     },
     "🛡️ 防御板块": {
-        "XLV":     ["医疗健康", "Health Care Sector ETF"],
-        "XLP":     ["必需消费", "Consumer Staples Sector ETF"],
-        "WMT":     ["沃尔玛", "Walmart stock consumer"],
+        "XLV":     ["医疗健康ETF", "Health Care Sector ETF"],
+        "XLP":     ["必需消费ETF", "Consumer Staples Sector ETF"],
+        "WMT":     ["沃尔玛 (零售巨头)", "Walmart stock consumer spending"],
+        "KO":      ["可口可乐", "Coca-Cola stock defensive"],
+        "UNH":     ["联合健康", "UnitedHealth Group stock"],
     },
     "🇨🇳 中国与新兴": {
         "^HSI":    ["恒生指数", "Hang Seng Index Hong Kong"],
-        "FXI":     ["中国大盘股", "China large cap ETF investing"],
-        "KWEB":    ["中国互联网", "China internet ETF tech"],
+        "FXI":     ["中国大盘股ETF", "China large cap ETF investing"],
+        "KWEB":    ["中国互联网ETF", "China internet ETF tech regulation"],
+        "EEM":     ["新兴市场ETF", "Emerging Markets ETF growth"],
     }
 }
 
 SPECIAL_TOPICS = [
-    "US Federal Reserve Powell policy",           # 美联储
-    "Bank of Japan Governor Ueda policy",         # 日本央行
-    "Geopolitical tension Middle East Russia",    # 地缘政治
-    "US China trade war tariffs",                 # 贸易战
-    "US inflation CPI PCE data",                  # 通胀
-    "US recession soft landing probability",      # 衰退预测
-    "Artificial Intelligence AI market impact",   # AI 影响
-    "trump",                                      # 特朗普
+    # --- 🏦 央行与政策 (市场最关注) ---
+    "US Federal Reserve Powell interest rate decision", # 美联储/鲍威尔
+    "Bank of Japan Governor Ueda monetary policy",      # 日本央行/植田和男
+    "US inflation CPI PCE data report",                 # 通胀数据
+    "US Non-farm payrolls unemployment rate",           # 就业/非农
 
+    # --- ⚔️ 地缘与大选 (突发风险) ---
+    "Geopolitical tension Middle East Israel Iran",     # 中东局势
+    "Russia Ukraine war latest news",                   # 俄乌局势
+    "US Presidential Election 2024 Trump Harris",       # 美国大选
+    "US China trade war tariffs restrictions",          # 中美贸易/关税
+
+    # --- 📉 经济前景 ---
+    "US economic recession soft landing probability",   # 衰退vs软着陆
+    "Global supply chain disruption shipping",          # 供应链/红海危机
+    "US commercial real estate crisis office",          # 美国商业地产危机
+    
+    # --- 🤖 产业变革 ---
+    "Artificial Intelligence regulation safety",        # AI 监管
+    "Global energy transition electric vehicles demand" # 能源转型/电车需求
+    "trump",                                            # 特朗普
 ]
 
 def get_news(query):
