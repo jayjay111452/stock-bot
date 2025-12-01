@@ -7,159 +7,240 @@ from urllib.parse import quote
 import google.generativeai as genai
 
 # === 页面设置 ===
-st.set_page_config(page_title="美股AI分析师", page_icon="📈")
-st.title("📈 美股AI分析师")
-st.caption("Powered by Google Gemini 2.5 & Yahoo Finance")
+st.set_page_config(page_title="美股全景AI雷达", page_icon="📡", layout="wide")
+st.title("📡 美股全景AI雷达")
+st.caption("Powered by Google Gemini 2.5 & Yahoo Finance | 全球宏观/科技/周期/避险")
 
-# === 侧边栏：API Key 配置 ===
-# 这样你就不用把 Key 写死在代码里，防止泄露
-api_key = st.sidebar.text_input("输入 Google API Key", type="password")
+# === 侧边栏：配置 ===
+with st.sidebar:
+    st.header("⚙️ 控制台")
+    api_key = st.text_input("Google API Key", type="password", help="需要 Gemini API 权限")
+    st.info("提示：由于监控标的增加到40+个，完整扫描可能需要 1-2 分钟，请耐心等待。")
 
-# === 核心逻辑 ===
-WATCHLIST = {
-    # --- 🇯🇵 日本与汇率 (流动性源头) ---
-    "JPY=X": ["美元兑日元", "USD JPY exchange rate carry trade"], 
-    "^N225": ["日经225", "Nikkei 225 stock market"],
-    
-    # --- 🇺🇸 宏观与避险 (地缘/通胀) ---
-    "^TNX":  ["10年期美债", "US 10 year treasury yield"], 
-    "DX-Y.NYB": ["美元指数", "US Dollar index"],
-    "^VXN":  ["纳指恐慌指数", "Nasdaq Volatility Index"],
-    "GC=F":  ["黄金 (地缘避险)", "Gold price investing"], 
-    "CL=F":  ["原油 (通胀/中东)", "Crude oil price energy"], 
-
-    # --- 🤖 科技七巨头 (Mag 7) ---
-    "NVDA":  ["英伟达", "Nvidia stock news"],
-    "AAPL":  ["苹果", "Apple Inc stock news"],
-    "MSFT":  ["微软", "Microsoft stock AI"],
-    "TSLA":  ["特斯拉", "Tesla stock news"],
-    "AMZN":  ["亚马逊", "Amazon stock news"],
-    "META":  ["Meta", "Meta Platforms news"],
-    "GOOGL": ["谷歌", "Alphabet Google stock"],
-    
-    # --- ⚙️ 关键半导体 ---
-    "TSM":   ["台积电", "TSMC stock news"],
+# === 核心逻辑：资产分组清单 ===
+WATCHLIST_GROUPS = {
+    "🚀 市场总览": {
+        "^GSPC":   ["标普500", "S&P 500 market analysis"],
+        "^IXIC":   ["纳斯达克", "Nasdaq Composite analysis"],
+        "^RUT":    ["罗素2000 (实体经济)", "Russell 2000 small cap stocks"],
+        "^VIX":    ["VIX恐慌指数", "CBOE VIX volatility index"],
+    },
+    "👑 科技七巨头": {
+        "NVDA":    ["英伟达", "Nvidia stock news"],
+        "MSFT":    ["微软", "Microsoft stock AI"],
+        "AAPL":    ["苹果", "Apple Inc stock news"],
+        "GOOGL":   ["谷歌", "Alphabet Google stock"],
+        "AMZN":    ["亚马逊", "Amazon stock news"],
+        "META":    ["Meta", "Meta Platforms news"],
+        "TSLA":    ["特斯拉", "Tesla stock news"],
+    },
+    "⚙️ 硬核半导体": {
+        "TSM":     ["台积电", "TSMC stock news"],
+        "ASML":    ["ASML", "ASML stock lithography"],
+        "AVGO":    ["博通", "Broadcom stock news"],
+        "AMD":     ["AMD", "AMD stock news"],
+        "SMH":     ["半导体ETF", "VanEck Vectors Semiconductor ETF"],
+    },
+    "💰 宏观流动性": {
+        "^TNX":    ["10年期美债", "US 10 year treasury yield"],
+        "DX-Y.NYB": ["美元指数", "US Dollar index"],
+        "JPY=X":   ["美元兑日元", "USD JPY exchange rate"],
+        "TLT":     ["20年+美债", "iShares 20+ Year Treasury Bond ETF"],
+    },
+    "🚨 信用与避险": {
+        "HYG":     ["高收益债(垃圾债)", "High Yield Corporate Bond ETF default risk"],
+        "GLD":     ["黄金", "Gold price investing"],
+        "BTC-USD": ["比特币", "Bitcoin crypto market sentiment"],
+    },
+    "🏭 周期与通胀": {
+        "CL=F":    ["原油", "Crude oil price energy"],
+        "XLE":     ["能源板块", "US Energy Sector ETF"],
+        "XLF":     ["金融板块", "US Financials Sector ETF"],
+        "CAT":     ["卡特彼勒", "Caterpillar stock economy"],
+    },
+    "🛡️ 防御板块": {
+        "XLV":     ["医疗健康", "Health Care Sector ETF"],
+        "XLP":     ["必需消费", "Consumer Staples Sector ETF"],
+        "WMT":     ["沃尔玛", "Walmart stock consumer"],
+    },
+    "🇨🇳 中国与新兴": {
+        "^HSI":    ["恒生指数", "Hang Seng Index Hong Kong"],
+        "FXI":     ["中国大盘股", "China large cap ETF investing"],
+        "KWEB":    ["中国互联网", "China internet ETF tech"],
+    }
 }
 
 SPECIAL_TOPICS = [
-    "Bank of Japan Governor Ueda policy",  # 日本央行
-    "US Federal Reserve Powell",           # 美联储
-    "Geopolitical tension Middle East Russia China", # 地缘政治
-    "US China trade war tariffs",          # 贸易战/关税
+    "US Federal Reserve Powell policy",           # 美联储
+    "Bank of Japan Governor Ueda policy",         # 日本央行
+    "Geopolitical tension Middle East Russia",    # 地缘政治
+    "US China trade war tariffs",                 # 贸易战
+    "US inflation CPI PCE data",                  # 通胀
+    "US recession soft landing probability",      # 衰退预测
+    "Artificial Intelligence AI market impact",   # AI 影响
+    "trump",                                      # 特朗普
+
 ]
 
 def get_news(query):
     encoded = quote(query)
     url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
     try:
-        # 使用更合理的 User-Agent 避免某些网站的阻止
         headers = {'User-Agent': 'Mozilla/5.0'}
-        resp = requests.get(url, timeout=7, headers=headers)
+        resp = requests.get(url, timeout=6, headers=headers)
         feed = feedparser.parse(resp.content)
-        # 增加返回数量，以获得更全面的概括数据
-        return [{"title": e.title, "link": e.link} for e in feed.entries[:5]]
+        return [{"title": e.title, "link": e.link} for e in feed.entries[:3]] # 限制每条3个新闻，避免过长
     except: return []
 
 def run_analysis():
     if not api_key:
-        st.error("请先在左侧输入 API Key")
+        st.error("❌ 请先在左侧输入 API Key")
         return
 
     genai.configure(api_key=api_key.strip(), transport='rest')
     model = genai.GenerativeModel('gemini-2.5-pro')
     
+    # 界面初始化
     status_text = st.empty()
     progress_bar = st.progress(0)
     
+    # 创建标签页
+    tab_names = list(WATCHLIST_GROUPS.keys()) + ["🔍 宏观话题"]
+    tabs = st.tabs(tab_names)
+    
     market_data = ""
-    # 新增一个列表用于收集所有新闻，用于后续的概括
     all_news_titles = [] 
     
-    total_steps = len(WATCHLIST) + len(SPECIAL_TOPICS)
+    # 计算总步数
+    total_assets = sum(len(v) for v in WATCHLIST_GROUPS.values())
+    total_topics = len(SPECIAL_TOPICS)
+    total_steps = total_assets + total_topics
     current_step = 0
 
-    # 1. 抓取资产数据
-    for ticker, info in WATCHLIST.items():
-        status_text.text(f"正在扫描: {info[0]}...")
-        try:
-            stock = yf.Ticker(ticker)
-            # 增加一些等待时间，防止 API 频率限制
-            time.sleep(0.1) 
-            hist = stock.history(period="2d")
-            price = f"{hist['Close'].iloc[-1]:.2f}" if len(hist) > 0 else "N/A"
+    # === 1. 分组抓取资产数据 ===
+    # 遍历每一个分组（对应一个Tab）
+    for i, (group_name, items) in enumerate(WATCHLIST_GROUPS.items()):
+        with tabs[i]: # 切换到对应标签页显示
+            cols = st.columns(2) # 每行显示两个卡片，更紧凑
+            col_idx = 0
             
-            news = get_news(info[1])
-            market_data += f"\n【{info[0]}】 价格:{price}\n"
-            for n in news:
-                market_data += f"   - {n['title']}\n"
-                # 收集新闻标题
-                all_news_titles.append(n['title'])
+            market_data += f"\n=== 【{group_name}】板块数据 ===\n"
             
-            # 在界面上展示实时数据卡片
-            with st.expander(f"{info[0]} ({price})", expanded=False):
-                for n in news:
-                    st.write(f"- [{n['title']}]({n['link']})")
+            for ticker, info in items.items():
+                status_text.text(f"📡 正在扫描: {group_name} - {info[0]}...")
+                
+                try:
+                    # 获取价格
+                    stock = yf.Ticker(ticker)
+                    time.sleep(0.1) # 防封控
+                    hist = stock.history(period="2d")
+                    
+                    price_str = "N/A"
+                    change_str = ""
+                    if len(hist) > 0:
+                        last_price = hist['Close'].iloc[-1]
+                        price_str = f"{last_price:.2f}"
+                        # 计算涨跌幅
+                        if len(hist) > 1:
+                            prev_price = hist['Close'].iloc[-2]
+                            change = ((last_price - prev_price) / prev_price) * 100
+                            emoji = "🔴" if change < 0 else "🟢"
+                            change_str = f"({emoji} {change:+.2f}%)"
 
-        except Exception as e:
-            # st.error(f"Error fetching data for {info[0]}: {e}") # Debugging
-            pass
+                    # 获取新闻
+                    news = get_news(info[1])
+                    
+                    # 记录数据给 AI
+                    market_data += f"[{info[0]}] 价格:{price_str} {change_str}\n"
+                    for n in news:
+                        market_data += f"   - News: {n['title']}\n"
+                        all_news_titles.append(n['title'])
+                    
+                    # 界面展示 (使用 st.expander)
+                    with cols[col_idx % 2].expander(f"{info[0]} {price_str} {change_str}", expanded=False):
+                        for n in news:
+                            st.write(f"- [{n['title']}]({n['link']})")
+                    
+                    col_idx += 1
+
+                except Exception as e:
+                    # st.warning(f"无法获取 {info[0]}: {e}")
+                    pass
+                
+                current_step += 1
+                progress_bar.progress(current_step / total_steps)
+
+    # === 2. 抓取话题 ===
+    with tabs[-1]: # 最后一个标签页
+        status_text.text(f"📡 正在追踪宏观话题...")
+        st.caption("基于 Google News 的实时话题追踪")
         
-        current_step += 1
-        progress_bar.progress(current_step / total_steps)
+        market_data += f"\n=== 【宏观话题追踪】 ===\n"
+        
+        for topic in SPECIAL_TOPICS:
+            news = get_news(topic)
+            if news:
+                market_data += f"Topic: {topic}\n"
+                with st.expander(f"📌 {topic}", expanded=True):
+                    for n in news:
+                        st.write(f"- [{n['title']}]({n['link']})")
+                        market_data += f"   - {n['title']}\n"
+                        all_news_titles.append(n['title'])
+            
+            current_step += 1
+            progress_bar.progress(current_step / total_steps)
 
-    # 2. 抓取话题
-    for topic in SPECIAL_TOPICS:
-        status_text.text(f"正在追踪: {topic}...")
-        news = get_news(topic)
-        if news:
-            market_data += f"\n【话题: {topic}】\n"
-            for n in news:
-                market_data += f"   - {n['title']}\n"
-                # 收集新闻标题
-                all_news_titles.append(n['title'])
-
-        current_step += 1
-        progress_bar.progress(current_step / total_steps)
-
-    status_text.text("🤖 AI 正在撰写深度报告...")
+    status_text.text("🤖 AI 正在基于全景数据撰写深度内参 (约需 10-20 秒)...")
     
-    # 3. AI 分析 - 重点修改 Prompt
-    
-    # 将收集到的所有新闻标题去重并整理成一个字符串，供模型概括使用
+    # === 3. AI 分析 ===
     unique_news_titles = "\n".join(list(set(all_news_titles)))
     
     prompt = f"""
-    角色：全球宏观对冲基金策略师。
-    任务：基于以下【市场数据】和【原始新闻标题】写一份【美股实战内参】。
+    角色：华尔街顶级宏观对冲基金的首席策略师 (CIO)。
+    任务：基于以下【全景市场数据】撰写一份《全球跨资产实战内参》。
     
-    --- 原始新闻标题（需先概括为“本日焦点新闻速览”板块）---
+    你需要综合分析：科技股动能、宏观流动性(美债/美元/日元)、信用风险(高收益债)、以及地缘与中国资产的影响。
+    
+    --- 📰 原始新闻池 (供概括) ---
     {unique_news_titles}
     
-    --- 市场数据（用于后续分析）---
+    --- 📊 全景市场数据 (含价格变动) ---
     {market_data}
     
-    要求：
-    1. **全中文**，逻辑严密，语气专业。
-    2. **去链接化**。
-    3. **必须先概括**所有【原始新闻标题】为一个单独的板块：**📰 本日焦点新闻速览**。这个板块应列出 5-8 条重要新闻，并对每条新闻进行**一句简要的中文概括**。
+    --- 写作要求 ---
+    1. **结构化输出**：请严格按照下方目录结构输出。
+    2. **去链接化**：不要包含任何 URL。
+    3. **中文写作**：专业、犀利、简练。
     
-    最终板块结构：
-    1. 📰 本日焦点新闻速览 (需对原始新闻标题进行概括，中文)
-    2. 🇯🇵 日本流动性
-    3. 🌍 地缘避险
-    4. 🇺🇸 宏观压力
-    5. 👑 科技七巨头
-    6. 📝 交易策略(含仓位建议)
+    --- 报告目录结构 ---
+    # 📰 本日焦点 (Market Focus)
+    > (从新闻池中提炼5条最重要新闻，一句话概括，并在末尾标注其对市场是[利多]还是[利空])
+
+    # 1. 🌡️ 市场温度计 (Market Breadth)
+    > (分析标普vs罗素、恐慌指数VIX、以及比特币。判断当前是"全面牛市"、"只有科技股涨的虚假繁荣"还是"避险模式"？)
+
+    # 2. 🇯🇵 宏观与流动性 (Liquidity Watch)
+    > (重点分析美债收益率、日元汇率、美元指数。流动性是在收紧还是释放？)
+
+    # 3. 🤖 科技与半导体 (Tech & AI)
+    > (点评 NVDA/MSFT/TSM 等核心票走势。AI 泡沫不仅是信仰，还要看价格动能。)
+
+    # 4. ⚠️ 风险雷达 (Risk Monitor)
+    > (观察高收益债 HYG、黄金 GLD 和原油。是否有经济衰退或通胀反弹的迹象？)
+
+    # 5. 📝 交易员策略 (Actionable Strategy)
+    > (给出具体的操作建议：做多哪个板块？对冲什么风险？当前仓位建议是激进还是防御？)
     """
     
     try:
         response = model.generate_content(prompt)
-        st.success("分析完成！")
+        status_text.text("✅ 分析完成！")
+        st.success("深度分析报告已生成")
         st.markdown("---")
         st.markdown(response.text)
     except Exception as e:
         st.error(f"AI 生成失败: {e}")
 
-# === 按钮 ===
-if st.button("🚀 启动全景雷达", type="primary"):
+# === 启动按钮 ===
+if st.button("🚀 启动全景雷达 (Full Scan)", type="primary"):
     run_analysis()
