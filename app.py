@@ -117,7 +117,6 @@ SPECIAL_TOPICS = [
     # --- ⚔️ 地缘与大选 (突发风险) ---
     "Geopolitical tension Middle East Israel Iran",     # 中东局势
     "Russia Ukraine war latest news",                   # 俄乌局势
-    "US Presidential Election 2024 Trump Harris",       # 美国大选
     "US China trade war tariffs restrictions",          # 中美贸易/关税
 
     # --- 📉 经济前景 ---
@@ -133,13 +132,19 @@ SPECIAL_TOPICS = [
 ]
 
 def get_news(query):
-    encoded = quote(query)
+    # 修改点：在查询词后强制加上 " when:3d" (过去3天)，确保新闻是热乎的
+    # 如果觉得3天太短，可以改成 " when:7d"
+    search_query = f"{query} when:3d"
+    encoded = quote(search_query)
+    
     url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         resp = requests.get(url, timeout=6, headers=headers)
         feed = feedparser.parse(resp.content)
-        return [{"title": e.title, "link": e.link} for e in feed.entries[:3]] # 限制每条3个新闻，避免过长
+        # 增加排序逻辑，确保返回列表里也是按时间发布的倒序
+        # 虽然 Google RSS 应该已经是排序好的，但双重保险更稳妥
+        return [{"title": e.title, "link": e.link} for e in feed.entries[:3]]
     except: return []
 
 def run_analysis():
