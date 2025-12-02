@@ -108,17 +108,16 @@ WATCHLIST_GROUPS = {
 
 SPECIAL_TOPICS = [
     # --- 🏦 央行与流动性 (已优化：双向追踪 QE 和 QT) ---
-    "Federal Reserve balance sheet QE QT expansion contraction", 
+    "Federal Reserve balance sheet QE QT expansion contraction", # 美联储资产负债表 (扩表/缩表)
     "Fed reverse repo facility RRP liquidity",          # 逆回购 (流动性蓄水池)
-    "US Federal Reserve Powell interest rate decision", # 利率决议
-    "US Federal Reserve Powell interest rate decision", # 美联储/鲍威尔
-    "Bank of Japan Governor Ueda monetary policy",      # 日本央行/植田和男
-    "US inflation CPI PCE data report",                 # 通胀数据
-    "US Non-farm payrolls unemployment rate",           # 就业/非农
+    "US Federal Reserve interest rate decision",        # 美联储利率决议 (通用版)
+    "Bank of Japan Governor Ueda monetary policy",      # 日本央行 (全球流动性源头)
 
     # --- 📊 关键经济指引 (新增 PMI) ---
     "US ISM Manufacturing PMI report",                  # 制造业 PMI (关注是否萎缩)
     "US ISM Services PMI report economy",               # 服务业 PMI (美国经济的核心支柱)
+    "US inflation CPI PCE data report",                 # 通胀数据
+    "US Non-farm payrolls unemployment rate",           # 就业/非农
     
     # --- ⚔️ 地缘与新政 (突发风险) ---
     "Geopolitical tension Middle East Israel Iran",     # 中东局势
@@ -129,6 +128,7 @@ SPECIAL_TOPICS = [
     "US economic recession soft landing probability",   # 衰退vs软着陆
     "Global supply chain disruption shipping",          # 供应链/红海危机
     "US commercial real estate crisis office",          # 商业地产危机
+    "US economic recession soft landing probability",   # 衰退概率
     
     # --- 🤖 产业变革 ---
     "Artificial Intelligence regulation safety",        # AI 监管
