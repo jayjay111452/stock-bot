@@ -112,29 +112,40 @@ SPECIAL_TOPICS = [
     "Bank of Japan Governor Ueda monetary policy",      # 日本央行/植田和男
     "US inflation CPI PCE data report",                 # 通胀数据
     "US Non-farm payrolls unemployment rate",           # 就业/非农
-    "US manufacturing services PMI data",               # PMI 数据
 
-    # --- ⚔️ 地缘与大选 (突发风险) ---
+    # --- 📊 关键经济指引 (新增 PMI) ---
+    "US ISM Manufacturing PMI report",                  # 制造业 PMI (关注是否萎缩)
+    "US ISM Services PMI report economy",               # 服务业 PMI (美国经济的核心支柱)
+    
+    # --- ⚔️ 地缘与新政 (突发风险) ---
     "Geopolitical tension Middle East Israel Iran",     # 中东局势
     "Russia Ukraine war latest news",                   # 俄乌局势
+    "Trump administration policy tariff China",         # 特朗普新政/关税 (已更新为新政)
     "US China trade war tariffs restrictions",          # 中美贸易/关税
 
     # --- 📉 经济前景 ---
     "US economic recession soft landing probability",   # 衰退vs软着陆
     "Global supply chain disruption shipping",          # 供应链/红海危机
-    "US commercial real estate crisis office",          # 美国商业地产危机
-    
+    "US commercial real estate crisis office",          # 商业地产危机
     
     # --- 🤖 产业变革 ---
     "Artificial Intelligence regulation safety",        # AI 监管
     "Global energy transition electric vehicles demand" # 能源转型/电车需求
-    "trump",                                            # 特朗普
 ]
 
 def get_news(query):
-    # 修改点：在查询词后强制加上 " when:3d" (过去3天)，确保新闻是热乎的
-    # 如果觉得3天太短，可以改成 " when:7d"
-    search_query = f"{query} when:3d"
+    # 默认针对普通新闻：只看最近 3 天，确保"本日焦点"是新鲜热辣的
+    time_window = "when:3d"
+    
+    # 针对 PMI 数据：因为是月度数据，必须放宽到 30 天，否则容易抓空
+    if "PMI" in query.upper():
+        time_window = "when:30d"
+    
+    # 针对大选或长期政策：可以适当放宽到 7 天 (可选)
+    elif "POLICY" in query.upper() or "TRUMP" in query.upper():
+        time_window = "when:7d"
+
+    search_query = f"{query} {time_window}"
     encoded = quote(search_query)
     
     url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
@@ -142,8 +153,6 @@ def get_news(query):
         headers = {'User-Agent': 'Mozilla/5.0'}
         resp = requests.get(url, timeout=6, headers=headers)
         feed = feedparser.parse(resp.content)
-        # 增加排序逻辑，确保返回列表里也是按时间发布的倒序
-        # 虽然 Google RSS 应该已经是排序好的，但双重保险更稳妥
         return [{"title": e.title, "link": e.link} for e in feed.entries[:3]]
     except: return []
 
