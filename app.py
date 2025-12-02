@@ -14,7 +14,33 @@ st.caption("Powered by Google Gemini 2.5 & Yahoo Finance | 全球宏观/科技/�
 # === 侧边栏：配置 ===
 with st.sidebar:
     st.header("⚙️ 控制台")
-    api_key = st.text_input("Google API Key", type="password", help="需要 Gemini API 权限")
+    
+    # 1. 获取用户输入的 Key
+    user_api_key = st.text_input("Google API Key", type="password", help="即刻申请: https://aistudio.google.com/")
+    
+    # 2. 尝试从 Secrets 获取公共演示 Key
+    # 注意：这里的名字 GEMINI_DEMO_KEY 必须和你 Streamlit 后台 Secrets 里设置的一模一样
+    system_api_key = st.secrets.get("GEMINI_DEMO_KEY", None)
+    
+    # 3. 决定最终使用的 Key
+    if user_api_key:
+        final_api_key = user_api_key
+        key_type = "user"
+    elif system_api_key:
+        final_api_key = system_api_key
+        key_type = "system"
+    else:
+        final_api_key = None
+        key_type = "none"
+
+    # 4. 显示当前状态
+    if key_type == "user":
+        st.success("✅ 使用您的个人 Key (速度快/隐私)")
+    elif key_type == "system":
+        st.warning("⚠️ 试用模式：使用公共 Key (可能会限流)")
+    else:
+        st.error("❌ 未检测到 Key，请先配置")
+
     st.info("提示：由于监控标的增加到40+个，完整扫描可能需要 1-2 分钟，请耐心等待。")
 
 # === 核心逻辑：资产分组清单 ===
@@ -115,11 +141,13 @@ def get_news(query):
     except: return []
 
 def run_analysis():
-    if not api_key:
-        st.error("❌ 请先在左侧输入 API Key")
+    # 检查全局变量 final_api_key 是否存在且有效
+    if 'final_api_key' not in globals() or not final_api_key:
+        st.error("❌ 请先在左侧配置 API Key")
         return
 
-    genai.configure(api_key=api_key.strip(), transport='rest')
+    # 使用选定的 Key 进行配置
+    genai.configure(api_key=final_api_key.strip(), transport='rest')
     model = genai.GenerativeModel('gemini-2.5-pro')
     
     # 界面初始化
