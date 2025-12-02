@@ -107,7 +107,10 @@ WATCHLIST_GROUPS = {
 }
 
 SPECIAL_TOPICS = [
-    # --- 🏦 央行与政策 (市场最关注) ---
+    # --- 🏦 央行与流动性 (已优化：双向追踪 QE 和 QT) ---
+    "Federal Reserve balance sheet QE QT expansion contraction", 
+    "Fed reverse repo facility RRP liquidity",          # 逆回购 (流动性蓄水池)
+    "US Federal Reserve Powell interest rate decision", # 利率决议
     "US Federal Reserve Powell interest rate decision", # 美联储/鲍威尔
     "Bank of Japan Governor Ueda monetary policy",      # 日本央行/植田和男
     "US inflation CPI PCE data report",                 # 通胀数据
@@ -304,7 +307,10 @@ def run_analysis():
     > (对比标普500(^GSPC)与罗素2000(^RUT)的表现，判断资金是在抱团巨头还是从广泛复苏？结合恐慌指数(^VIX)判断当前市场的情绪拥挤度。)
 
     # 2. 🦅 宏观流动性阀门 (Liquidity & Rates)
-    > (这是分析的基石。结合10年期美债(^TNX)、美元指数(DX-Y)和日元(JPY=X)的走势。**核心回答**：当前金融条件是在收紧还是放松？比特币(BTC)作为流动性金丝雀发出了什么信号？)
+    > (这是分析的基石。结合10年期美债(^TNX)、美元指数(DX-Y)和日元(JPY=X)的走势。
+    > **核心关注**：
+    > * **QT/QE 信号**：从新闻中判断美联储当前的缩表(QT)节奏是加速还是放缓？逆回购(RRP)资金释放是否对冲了缩表影响？
+    > * **金融条件**：当前是"美元荒"(收紧)还是"水漫金山"(宽松)？比特币(BTC)作为流动性金丝雀发出了什么信号？)
 
     # 3. 🤖 科技股动能解构 (Tech Momentum)
     > (不要只看涨跌。分析 NVDA/MSFT/TSM 的价格动能。当前是"基本面驱动"的上涨，还是"逼空式"的情绪宣泄？关注半导体板块(SMH)是否出现顶部背离。)
