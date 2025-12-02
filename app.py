@@ -112,6 +112,7 @@ SPECIAL_TOPICS = [
     "Bank of Japan Governor Ueda monetary policy",      # 日本央行/植田和男
     "US inflation CPI PCE data report",                 # 通胀数据
     "US Non-farm payrolls unemployment rate",           # 就业/非农
+    "US manufacturing services PMI data",               # PMI 数据
 
     # --- ⚔️ 地缘与大选 (突发风险) ---
     "Geopolitical tension Middle East Israel Iran",     # 中东局势
@@ -123,6 +124,7 @@ SPECIAL_TOPICS = [
     "US economic recession soft landing probability",   # 衰退vs软着陆
     "Global supply chain disruption shipping",          # 供应链/红海危机
     "US commercial real estate crisis office",          # 美国商业地产危机
+    
     
     # --- 🤖 产业变革 ---
     "Artificial Intelligence regulation safety",        # AI 监管
