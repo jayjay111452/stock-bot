@@ -139,12 +139,19 @@ def get_news(query):
     # 默认针对普通新闻：只看最近 3 天，确保"本日焦点"是新鲜热辣的
     time_window = "when:3d"
     
-    # 针对 PMI 数据：因为是月度数据，必须放宽到 30 天，否则容易抓空
-    if "PMI" in query.upper():
+    q_upper = query.upper()
+
+    # 1. 针对 PMI 数据：月度数据，必须放宽到 30 天
+    if "PMI" in q_upper:
         time_window = "when:30d"
     
-    # 针对大选或长期政策：可以适当放宽到 7 天 (可选)
-    elif "POLICY" in query.upper() or "TRUMP" in query.upper():
+    # 2. 针对 央行资产负债表(QE/QT)：
+    # 美联储 H.4.1 数据每周发布一次，所以用 7 天最合适，既不漏数据也不看旧闻
+    elif "BALANCE SHEET" in q_upper or "QE" in q_upper or "QT" in q_upper:
+        time_window = "when:7d"
+    
+    # 3. 针对 大选或长期政策：适当放宽到 7 天
+    elif "POLICY" in q_upper or "TRUMP" in q_upper:
         time_window = "when:7d"
 
     search_query = f"{query} {time_window}"
