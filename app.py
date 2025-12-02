@@ -120,7 +120,6 @@ SPECIAL_TOPICS = [
     # --- ⚔️ 地缘与新政 (突发风险) ---
     "Geopolitical tension Middle East Israel Iran",     # 中东局势
     "Russia Ukraine war latest news",                   # 俄乌局势
-    "Trump administration policy tariff China",         # 特朗普新政/关税 (已更新为新政)
     "US China trade war tariffs restrictions",          # 中美贸易/关税
 
     # --- 📉 经济前景 ---
