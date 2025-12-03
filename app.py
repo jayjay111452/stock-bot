@@ -111,6 +111,7 @@ SPECIAL_TOPICS = [
     "Federal Reserve balance sheet QE QT expansion contraction", # 美联储资产负债表 (扩表/缩表)
     "Fed reverse repo facility RRP liquidity",          # 逆回购 (流动性蓄水池)
     "US Federal Reserve interest rate decision",        # 美联储利率决议 (通用版)
+    "Fed Chair speech testimony",         # 【新增】美联储主席讲话/听证会 (这是市场波动之源)
     "Bank of Japan Governor Ueda monetary policy",      # 日本央行 (全球流动性源头)
 
     # --- 📊 关键经济指引 (新增 PMI) ---
@@ -118,7 +119,12 @@ SPECIAL_TOPICS = [
     "US ISM Services PMI report economy",               # 服务业 PMI (美国经济的核心支柱)
     "US inflation CPI PCE data report",                 # 通胀数据
     "US Non-farm payrolls unemployment rate",           # 就业/非农
+    "US unemployment rate jobless claims data",         # 【新增】失业率 + 初请失业金 (高频与低频结合)
     
+    # --- 🏛️ 政治与大选 (新增川普/新政) ---
+    "Donald Trump economic policy tariffs trade",       # 【新增】川普经济学 (关税/贸易/制造业)
+    "US government debt ceiling budget deficit",        # 美国债务/赤字 (长期隐患)
+
     # --- ⚔️ 地缘与新政 (突发风险) ---
     "Geopolitical tension Middle East Israel Iran",     # 中东局势
     "Russia Ukraine war latest news",                   # 俄乌局势
@@ -136,24 +142,46 @@ SPECIAL_TOPICS = [
 ]
 
 def get_news(query):
-    # 默认针对普通新闻：只看最近 3 天，确保"本日焦点"是新鲜热辣的
+    # === 默认设置 ===
+    # 针对个股 (NVDA, AAPL) 或 突发地缘新闻 (War, Crisis)，3天足够
     time_window = "when:3d"
     
     q_upper = query.upper()
 
-    # 1. 针对 PMI 数据：月度数据，必须放宽到 30 天
-    if "PMI" in q_upper:
+    # === 1. 月度/周期性宏观硬数据 (Macro Hard Data) -> 30天 ===
+    # 逻辑：CPI, 非农, PMI, 利率决议 都是低频高重磅数据。
+    # 必须抓取 30天，确保 AI 知道"上一次"的数据读数。
+    macro_keywords = [
+        "CPI", "PCE", "INFLATION",        # 通胀
+        "PAYROLL", "NON-FARM", "JOBS",    # 非农/就业
+        "UNEMPLOYMENT",                   # 失业率
+        "PMI", "ISM",                     # 采购经理人指数
+        "INTEREST RATE", "FED DECISION",  # 利率决议
+        "GDP",                            # GDP
+        "HOUSING STARTS", "RESIDENTIAL"   # 房地产数据
+    ]
+
+    # === 2. 政策/官员讲话/财政/贸易 (Policy & Narrative) -> 7天 ===
+    # 逻辑：鲍威尔讲话、财政部发债、贸易战、监管，通常发酵周期为一周。
+    policy_keywords = [
+        # 央行工具与流动性
+        "BALANCE SHEET", "QE", "QT", "REVERSE REPO", "RRP",
+        # 核心人物与讲话 (新增 POWELL, CHAIR, SPEECH)
+        "POWELL", "FED CHAIR", "SPEECH", "TESTIMONY", "YELLEN",
+        # 财政与贸易 (新增 DEBT, DEFICIT, TARIFFS)
+        "POLICY", "TRUMP", "BIDEN", "CONGRESS",
+        "DEBT", "DEFICIT", "BUDGET",      # 债务/赤字
+        "TARIFFS", "TRADE WAR",           # 贸易/关税
+        "REGULATION", "ANTITRUST"         # 监管
+    ]
+
+    # === 逻辑判断 (优先匹配 30天，再匹配 7天) ===
+    if any(k in q_upper for k in macro_keywords):
         time_window = "when:30d"
-    
-    # 2. 针对 央行资产负债表(QE/QT)：
-    # 美联储 H.4.1 数据每周发布一次，所以用 7 天最合适，既不漏数据也不看旧闻
-    elif "BALANCE SHEET" in q_upper or "QE" in q_upper or "QT" in q_upper:
-        time_window = "when:7d"
-    
-    # 3. 针对 大选或长期政策：适当放宽到 7 天
-    elif "POLICY" in q_upper or "TRUMP" in q_upper:
+    elif any(k in q_upper for k in policy_keywords):
         time_window = "when:7d"
 
+    # 生成搜索链接
     search_query = f"{query} {time_window}"
     encoded = quote(search_query)
     
@@ -163,7 +191,8 @@ def get_news(query):
         resp = requests.get(url, timeout=6, headers=headers)
         feed = feedparser.parse(resp.content)
         return [{"title": e.title, "link": e.link} for e in feed.entries[:3]]
-    except: return []
+    except: 
+        return []
 
 def run_analysis():
     # 检查全局变量 final_api_key 是否存在且有效
@@ -291,6 +320,9 @@ def run_analysis():
     2. **相关性检查**：美债收益率(^TNX)与科技股(QQQ/NVDA)的相关性是正还是负？这决定了当前是"杀估值"还是"业绩牛"。
     3. **风险传导**：高收益债(HYG)是否出现裂痕？这是判断"衰退交易"的金标准。
     4. **经济权重修正**：**切记美国是服务业导向经济(>80%)**。如果新闻显示"制造业PMI"疲软但"服务业PMI"强劲，这是**软着陆**特征，而非衰退。**严禁**仅因制造业数据差就过度渲染衰退恐慌，除非服务业PMI也跌破荣枯线。
+    5. **流动性真伪验证 (BTC vs Yields)**：检查比特币(BTC-USD)与10年期美债(^TNX)的关系。如果美债收益率飙升（通常利空风险资产），但BTC依然坚挺甚至创新高，说明市场正在交易"法币贬值"或"财政赤字失控"逻辑，这对硬资产（包括科技巨头）是深层支撑。
+    6. **川普交易修正**：如果新闻提及关税，检查美元(DXY)是否走强？这对新兴市场(EEM/FXI)是直接打击。
+    7. **硬数据 vs 软数据**：对比情绪指标(PMI)与实锤数据(失业金/非农)。如果PMI差但就业强，定义为"软着陆"而非衰退。
 
     ### 写作约束
     1. **语气**：冷峻、客观、数据驱动。拒绝模棱两可的废话（如"市场可能涨也可能跌"）。
@@ -316,9 +348,13 @@ def run_analysis():
 
     # 2. 🦅 宏观流动性阀门 (Liquidity & Rates)
     > (这是分析的基石。结合10年期美债(^TNX)、美元指数(DX-Y)和日元(JPY=X)的走势。
+    > (结合 **就业/通胀** 与 **比特币/美债** 进行定性。)
     > **核心关注**：
     > * **QT/QE 信号**：从新闻中判断美联储当前的缩表(QT)节奏是加速还是放缓？逆回购(RRP)资金释放是否对冲了缩表影响？
-    > * **金融条件**：当前是"美元荒"(收紧)还是"水漫金山"(宽松)？比特币(BTC)作为流动性金丝雀发出了什么信号？)
+    > * **经济周期定位**：当前处于 [复苏 / 过热 / 滞胀 / 衰退恐慌] 的哪个阶段？(依据：PMI vs 失业率)
+    > * **流动性温度计**：
+        * **传统端**：10年期美债(^TNX)是否突破关键位(如4.5%)从而压制估值？
+        * **加密端**：比特币(BTC)作为"全球流动性敏感度最高的资产"，当前是随纳指回调(风险偏好退潮)，还是独立走强(对冲法币/赤字交易)？
 
     # 3. 🤖 科技股动能解构 (Tech Momentum)
     > (不要只看涨跌。分析 NVDA/MSFT/TSM 的价格动能。当前是"基本面驱动"的上涨，还是"逼空式"的情绪宣泄？关注半导体板块(SMH)是否出现顶部背离。)
@@ -333,6 +369,8 @@ def run_analysis():
     > * **仓位建议**：(激进进攻 / 防御 / 现金为王)
     > * **首选做多**：(具体板块或资产)
     > * **核心对冲**：(需要对冲什么风险))
+    > * **关键监控点**：(例如：BTC是否跌破xx，或美债是否突破xx)
+    
     """
     
     try:
