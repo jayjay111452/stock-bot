@@ -5,6 +5,7 @@ import requests
 import time
 from urllib.parse import quote
 import google.generativeai as genai
+from datetime import datetime, timedelta
 
 # === 页面设置 ===
 st.set_page_config(page_title="美股全景AI雷达", page_icon="📡", layout="wide")
@@ -154,6 +155,8 @@ try:
 except:
     HAS_FRED = False
 
+from datetime import datetime, timedelta # <--- 必须导入这个库
+
 def get_macro_hard_data():
     """
     从 FRED 获取精准的宏观经济硬数据 (CPI, PCE, 失业率, 非农)
@@ -174,10 +177,15 @@ def get_macro_hard_data():
 
     data_summary += "--- 🔢 官方宏观硬数据 (FRED Verified) ---\n"
 
+    # === 修复点：计算"2年前"的日期，确保只抓取最近的数据 ===
+    # 比如：今天2025年，start_date 就是 2023年
+    start_date = (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')
+
     try:
         for name, series_id in indicators.items():
-            # 获取最近 13 个月的数据 (为了计算同比)
-            series = fred.get_series(series_id, limit=15).dropna()
+            # === 修复点：使用 observation_start 替代 limit ===
+            # 这样 FRED 就会只返回从 start_date 到现在的最新数据
+            series = fred.get_series(series_id, observation_start=start_date).dropna()
             
             if series.empty:
                 continue
@@ -189,13 +197,12 @@ def get_macro_hard_data():
             # 针对不同数据做格式化处理
             if "CPI" in name or "PCE" in name:
                 # 计算年率 (YoY): (当前值 - 12个月前值) / 12个月前值
-                # 注意：如果数据不够12个月会报错，这里做简单处理
                 if len(series) >= 13:
-                    year_ago_val = series.iloc[-13]
+                    year_ago_val = series.iloc[-13] # 取倒数第13个（一年前）
                     yoy = ((latest_val - year_ago_val) / year_ago_val) * 100
                     display_val = f"{yoy:.2f}% (YoY)"
                 else:
-                    display_val = f"Index {latest_val:.1f}"
+                    display_val = f"Index {latest_val:.1f} (数据不足1年)"
             
             elif "Non-Farm" in name:
                 # 计算月度新增 (Change): 当前 - 上个月
