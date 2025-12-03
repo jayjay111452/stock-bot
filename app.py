@@ -283,8 +283,17 @@ def run_analysis():
     status_text = st.empty()
     progress_bar = st.progress(0)
     
-    # 创建标签页
-    tab_names = list(WATCHLIST_GROUPS.keys()) + ["🔍 宏观话题"]
+    # === 1. 获取 FRED 硬数据 ===
+    # 注意：我们把这一步提前，确保数据在渲染标签页之前就已经准备好
+    if HAS_FRED:
+        status_text.text("🔢 正在连接美联储数据库 (FRED) 获取精准读数...")
+        macro_hard_data = get_macro_hard_data()
+    else:
+        macro_hard_data = "⚠️ 未配置 FRED API Key，无法获取精准宏观数据。请在 secrets.toml 中配置。"
+
+    # === 创建标签页 (新增：FRED 数据页) ===
+    # 这里的顺序决定了界面上 Tab 的排列顺序
+    tab_names = list(WATCHLIST_GROUPS.keys()) + ["🔍 宏观话题", "🔢 宏观数据 (FRED)"]
     tabs = st.tabs(tab_names)
     
     market_data = ""
@@ -296,18 +305,11 @@ def run_analysis():
     total_steps = total_assets + total_topics
     current_step = 0
 
-    # 1. 获取 FRED 硬数据 (新增)
-    if HAS_FRED:
-        status_text.text("🔢 正在连接美联储数据库 (FRED) 获取精准读数...")
-        macro_hard_data = get_macro_hard_data()
-    else:
-        macro_hard_data = "（未配置 FRED API，仅依赖新闻模糊推测数据）"
-
     # === 2. 分组抓取资产数据 ===
-    # 遍历每一个分组（对应一个Tab）
+    # 遍历每一个分组（对应前面的 Tab）
     for i, (group_name, items) in enumerate(WATCHLIST_GROUPS.items()):
         with tabs[i]: # 切换到对应标签页显示
-            cols = st.columns(2) # 每行显示两个卡片，更紧凑
+            cols = st.columns(2)
             col_idx = 0
             
             market_data += f"\n=== 【{group_name}】板块数据 ===\n"
@@ -318,7 +320,7 @@ def run_analysis():
                 try:
                     # 获取价格
                     stock = yf.Ticker(ticker)
-                    time.sleep(0.1) # 防封控
+                    time.sleep(0.1) 
                     hist = stock.history(period="2d")
                     
                     price_str = "N/A"
@@ -326,7 +328,6 @@ def run_analysis():
                     if len(hist) > 0:
                         last_price = hist['Close'].iloc[-1]
                         price_str = f"{last_price:.2f}"
-                        # 计算涨跌幅
                         if len(hist) > 1:
                             prev_price = hist['Close'].iloc[-2]
                             change = ((last_price - prev_price) / prev_price) * 100
@@ -336,13 +337,11 @@ def run_analysis():
                     # 获取新闻
                     news = get_news(info[1])
                     
-                    # 记录数据给 AI
                     market_data += f"[{info[0]}] 价格:{price_str} {change_str}\n"
                     for n in news:
                         market_data += f"   - News: {n['title']}\n"
                         all_news_titles.append(n['title'])
                     
-                    # 界面展示 (使用 st.expander)
                     with cols[col_idx % 2].expander(f"{info[0]} {price_str} {change_str}", expanded=False):
                         for n in news:
                             st.write(f"- [{n['title']}]({n['link']})")
@@ -350,14 +349,14 @@ def run_analysis():
                     col_idx += 1
 
                 except Exception as e:
-                    # st.warning(f"无法获取 {info[0]}: {e}")
                     pass
                 
                 current_step += 1
                 progress_bar.progress(current_step / total_steps)
 
-    # === 3. 抓取话题 (修改后：显示无消息状态) ===
-    with tabs[-1]: 
+    # === 3. 抓取话题 (使用倒数第二个 Tab) ===
+    # 因为我们最后追加了 FRED Tab，所以话题 Tab 变成了 tabs[-2]
+    with tabs[-2]: 
         status_text.text(f"📡 正在追踪宏观话题...")
         st.caption("基于 Google News 的实时话题追踪")
         
@@ -367,23 +366,34 @@ def run_analysis():
             news = get_news(topic)
             
             if news:
-                # === 情况 A: 有新闻 ===
                 market_data += f"Topic: {topic}\n"
-                # 提取第一个新闻的简短标题作为卡片标题的一部分
-                first_title = news[0]['title'][:20] + "..."
                 with st.expander(f"📌 {topic}", expanded=True):
                     for n in news:
                         st.write(f"- [{n['title']}]({n['link']})")
                         market_data += f"   - {n['title']}\n"
                         all_news_titles.append(n['title'])
             else:
-                # === 情况 B: 无新闻 (新增显示) ===
-                # 显示为灰色/折叠状态，让你知道系统检查过这个话题了
                 with st.expander(f"⚪ {topic} (暂无突发)", expanded=False):
                     st.caption("🔍 过去 3-30 天内未检索到核心报道，或搜索源暂时无响应。")
             
             current_step += 1
             progress_bar.progress(current_step / total_steps)
+
+    # === 4. 展示 FRED 硬数据 (新增：使用最后一个 Tab) ===
+    with tabs[-1]:
+        st.header("🔢 官方宏观经济硬数据")
+        st.caption("数据来源: Federal Reserve Economic Data (FRED) | St. Louis Fed")
+        st.info("💡 这些是未经调整的官方原始数值，AI 将结合这些数据与市场新闻进行交叉验证。")
+        
+        # 直接渲染 markdown 格式的数据
+        if HAS_FRED:
+            st.markdown(macro_hard_data)
+        else:
+            st.warning("⚠️ 检测到未配置 FRED API Key。请在 `.streamlit/secrets.toml` 中配置 `FRED_API_KEY` 以获取精准数据。")
+            st.code("""
+[general]
+FRED_API_KEY = "你的_API_KEY"
+            """, language="toml")
 
     status_text.text("🤖 AI 正在基于全景数据撰写深度内参 (约需 10-20 秒)...")
     
