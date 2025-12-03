@@ -119,6 +119,7 @@ SPECIAL_TOPICS = [
     "US ISM Services PMI report economy",               # 服务业 PMI (美国经济的核心支柱)
     "US inflation CPI PCE data report",                 # 通胀数据
     "US Non-farm payrolls unemployment rate",           # 就业/非农
+    "US ADP National Employment Report private payrolls", # 【新增】ADP 小非农 (非农前瞻)
     "US unemployment rate jobless claims data",         # 【新增】失业率 + 初请失业金 (高频与低频结合)
     
     # --- 🏛️ 政治与大选 (新增川普/新政) ---
@@ -331,7 +332,7 @@ def run_analysis():
     4. **经济权重修正**：**切记美国是服务业导向经济(>80%)**。如果新闻显示"制造业PMI"疲软但"服务业PMI"强劲，这是**软着陆**特征，而非衰退。**严禁**仅因制造业数据差就过度渲染衰退恐慌，除非服务业PMI也跌破荣枯线。
     5. **流动性真伪验证 (BTC vs Yields)**：检查比特币(BTC-USD)与10年期美债(^TNX)的关系。如果美债收益率飙升（通常利空风险资产），但BTC依然坚挺甚至创新高，说明市场正在交易"法币贬值"或"财政赤字失控"逻辑，这对硬资产（包括科技巨头）是深层支撑。
     6. **川普交易修正**：如果新闻提及关税，检查美元(DXY)是否走强？这对新兴市场(EEM/FXI)是直接打击。
-    7. **硬数据 vs 软数据**：对比情绪指标(PMI)与实锤数据(失业金/非农)。如果PMI差但就业强，定义为"软着陆"而非衰退。
+    7. **硬数据 vs 软数据**：对比情绪指标(PMI)与实锤数据(失业金/非农/ADP)。如果PMI差但就业强，定义为"软着陆"而非衰退。
 
     ### 写作约束
     1. **语气**：冷峻、客观、数据驱动。拒绝模棱两可的废话（如"市场可能涨也可能跌"）。
