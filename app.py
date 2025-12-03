@@ -142,6 +142,80 @@ SPECIAL_TOPICS = [
     "Global energy transition electric vehicles demand" # 能源转型/电车需求
 ]
 
+from fredapi import Fred
+import pandas as pd
+
+# 初始化 FRED (尝试从 secrets 获取 key)
+# 如果用户没有配置 FRED Key，这个功能会静默失败，不影响主程序
+try:
+    fred_key = st.secrets["general"]["FRED_API_KEY"]
+    fred = Fred(api_key=fred_key)
+    HAS_FRED = True
+except:
+    HAS_FRED = False
+
+def get_macro_hard_data():
+    """
+    从 FRED 获取精准的宏观经济硬数据 (CPI, PCE, 失业率, 非农)
+    """
+    if not HAS_FRED:
+        return "⚠️ 未配置 FRED API Key，无法获取精准宏观数据。请继续依赖新闻。"
+
+    data_summary = ""
+    
+    # 定义我们要抓取的数据 ID (FRED Series ID)
+    indicators = {
+        "CPI (消费者物价指数)": "CPIAUCSL",  # 原始指数，需计算同比
+        "PCE (个人消费支出)": "PCEPI",      # 原始指数，需计算同比
+        "Unemployment Rate (失业率)": "UNRATE", # 直接是百分比
+        "Non-Farm Payrolls (非农就业)": "PAYEMS", # 总人数，需计算增量
+        "10Y Treasury Yield (10年美债)": "DGS10" # 收益率
+    }
+
+    data_summary += "--- 🔢 官方宏观硬数据 (FRED Verified) ---\n"
+
+    try:
+        for name, series_id in indicators.items():
+            # 获取最近 13 个月的数据 (为了计算同比)
+            series = fred.get_series(series_id, limit=15).dropna()
+            
+            if series.empty:
+                continue
+
+            latest_date = series.index[-1].strftime('%Y-%m-%d')
+            latest_val = series.iloc[-1]
+            prev_val = series.iloc[-2]
+
+            # 针对不同数据做格式化处理
+            if "CPI" in name or "PCE" in name:
+                # 计算年率 (YoY): (当前值 - 12个月前值) / 12个月前值
+                # 注意：如果数据不够12个月会报错，这里做简单处理
+                if len(series) >= 13:
+                    year_ago_val = series.iloc[-13]
+                    yoy = ((latest_val - year_ago_val) / year_ago_val) * 100
+                    display_val = f"{yoy:.2f}% (YoY)"
+                else:
+                    display_val = f"Index {latest_val:.1f}"
+            
+            elif "Non-Farm" in name:
+                # 计算月度新增 (Change): 当前 - 上个月
+                change = (latest_val - prev_val) # 单位通常是千人
+                display_val = f"Total {latest_val:,.0f}k | Change: {change:+,.0f}k"
+            
+            elif "Rate" in name or "Yield" in name:
+                # 直接显示百分比
+                display_val = f"{latest_val:.2f}%"
+            
+            else:
+                display_val = f"{latest_val:.2f}"
+
+            data_summary += f"* **{name}**: {display_val} [Date: {latest_date}]\n"
+            
+    except Exception as e:
+        return f"⚠️ FRED 数据获取部分失败: {str(e)}"
+
+    return data_summary
+
 def get_news(query):
     # === 默认设置 ===
     # 针对个股 (NVDA, AAPL) 或 突发地缘新闻 (War, Crisis)，3天足够
@@ -222,7 +296,14 @@ def run_analysis():
     total_steps = total_assets + total_topics
     current_step = 0
 
-    # === 1. 分组抓取资产数据 ===
+    # 1. 获取 FRED 硬数据 (新增)
+    if HAS_FRED:
+        status_text.text("🔢 正在连接美联储数据库 (FRED) 获取精准读数...")
+        macro_hard_data = get_macro_hard_data()
+    else:
+        macro_hard_data = "（未配置 FRED API，仅依赖新闻模糊推测数据）"
+
+    # === 2. 分组抓取资产数据 ===
     # 遍历每一个分组（对应一个Tab）
     for i, (group_name, items) in enumerate(WATCHLIST_GROUPS.items()):
         with tabs[i]: # 切换到对应标签页显示
@@ -275,7 +356,7 @@ def run_analysis():
                 current_step += 1
                 progress_bar.progress(current_step / total_steps)
 
-    # === 2. 抓取话题 (修改后：显示无消息状态) ===
+    # === 3. 抓取话题 (修改后：显示无消息状态) ===
     with tabs[-1]: 
         status_text.text(f"📡 正在追踪宏观话题...")
         st.caption("基于 Google News 的实时话题追踪")
@@ -306,10 +387,20 @@ def run_analysis():
 
     status_text.text("🤖 AI 正在基于全景数据撰写深度内参 (约需 10-20 秒)...")
     
-    # === 3. AI 分析 ===
+# === 3. AI 分析与策略生成 ===
+    
+    # 3.1 数据清洗
+    # 将抓取到的所有新闻标题去重，整合成一个字符串
     unique_news_titles = "\n".join(list(set(all_news_titles)))
     
-# === 3. AI 分析 (优化版 Prompt) ===
+    # 3.2 准备宏观硬数据 (FRED)
+    # 如果配置了 FRED API，这里会获取精准数值；否则提示使用新闻推测
+    if 'HAS_FRED' in globals() and HAS_FRED:
+        macro_hard_data = get_macro_hard_data()
+    else:
+        macro_hard_data = "（未配置 FRED API，仅依赖新闻模糊推测数据）"
+
+    # 3.3 构建核心 Prompt (最终优化版)
     prompt = f"""
     ### 角色设定
     你是一家顶级华尔街宏观对冲基金（Global Macro Hedge Fund）的首席投资官（CIO）。你的风格是**Bridgewater（桥水）的极度求真**与**Soros（索罗斯）的反身性视角**的结合。你不对市场进行流水账式的报道，而是寻找**市场定价偏差**、**流动性拐点**和**不对称交易机会**。
@@ -318,10 +409,13 @@ def run_analysis():
     基于提供的【原始新闻池】和【全景市场数据】，撰写一份《全球跨资产实战内参》。
     
     ### 输入数据
-    --- 📰 市场叙事 (原始新闻) ---
+    --- 🔢 权威宏观数据 (FRED) ---
+    {macro_hard_data}  <-- 这里插入精准数值
+    
+    --- 📰 市场叙事 ---
     {unique_news_titles}
     
-    --- 📊 市场定价 (资产价格与变动) ---
+    --- 📊 资产价格 ---
     {market_data}
     
     ### 核心思维框架 (Chain of Thought)
