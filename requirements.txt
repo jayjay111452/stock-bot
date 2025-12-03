@@ -3,3 +3,4 @@ yfinance
 feedparser
 requests
 google-generativeai
+fredapi
