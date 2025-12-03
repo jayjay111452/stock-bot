@@ -274,8 +274,8 @@ def run_analysis():
                 current_step += 1
                 progress_bar.progress(current_step / total_steps)
 
-    # === 2. 抓取话题 ===
-    with tabs[-1]: # 最后一个标签页
+    # === 2. 抓取话题 (修改后：显示无消息状态) ===
+    with tabs[-1]: 
         status_text.text(f"📡 正在追踪宏观话题...")
         st.caption("基于 Google News 的实时话题追踪")
         
@@ -283,13 +283,22 @@ def run_analysis():
         
         for topic in SPECIAL_TOPICS:
             news = get_news(topic)
+            
             if news:
+                # === 情况 A: 有新闻 ===
                 market_data += f"Topic: {topic}\n"
+                # 提取第一个新闻的简短标题作为卡片标题的一部分
+                first_title = news[0]['title'][:20] + "..."
                 with st.expander(f"📌 {topic}", expanded=True):
                     for n in news:
                         st.write(f"- [{n['title']}]({n['link']})")
                         market_data += f"   - {n['title']}\n"
                         all_news_titles.append(n['title'])
+            else:
+                # === 情况 B: 无新闻 (新增显示) ===
+                # 显示为灰色/折叠状态，让你知道系统检查过这个话题了
+                with st.expander(f"⚪ {topic} (暂无突发)", expanded=False):
+                    st.caption("🔍 过去 3-30 天内未检索到核心报道，或搜索源暂时无响应。")
             
             current_step += 1
             progress_bar.progress(current_step / total_steps)
