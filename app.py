@@ -230,9 +230,9 @@ def get_news(query):
     
     q_upper = query.upper()
 
-    # === 1. 月度/周期性宏观硬数据 (Macro Hard Data) -> 30天 ===
-    # 逻辑：CPI, 非农, PMI, 利率决议 都是低频高重磅数据。
-    # 必须抓取 30天，确保 AI 知道"上一次"的数据读数。
+    # === 1. 月度/周期性宏观硬数据 ===
+    # 修改：将 30d 改为 14d。
+    # 如果数据是2周前发布的，它已经不是"News"了，而是"History"。
     macro_keywords = [
         "CPI", "PCE", "INFLATION",        # 通胀
         "PAYROLL", "NON-FARM", "JOBS",    # 非农/就业
@@ -257,11 +257,13 @@ def get_news(query):
         "REGULATION", "ANTITRUST"         # 监管
     ]
 
-    # === 逻辑判断 (优先匹配 30天，再匹配 7天) ===
+    # === 逻辑判断 ===
     if any(k in q_upper for k in macro_keywords):
-        time_window = "when:30d"
+        time_window = "when:14d"  # <--- 从 30d 改为 14d
     elif any(k in q_upper for k in policy_keywords):
-        time_window = "when:7d"
+        time_window = "when:7d"   # 政策类保持 7d 或更短
+    else:
+        time_window = "when:3d"   # 个股/突发 默认 3d
 
     # 生成搜索链接
     search_query = f"{query} {time_window}"
