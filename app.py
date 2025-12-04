@@ -276,6 +276,32 @@ def get_news(query):
     except: 
         return []
 
+def get_cnn_fear_and_greed():
+    """
+    抓取 CNN Fear & Greed Index (恐慌贪婪指数)
+    由于 CNN 没有官方公开 API，这里使用其图表数据端点。
+    """
+    url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+    # 必须伪装 User-Agent，否则会被拦截
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Referer": "https://www.cnn.com/"
+    }
+    
+    try:
+        r = requests.get(url, headers=headers, timeout=5)
+        r.raise_for_status()
+        data = r.json()
+        
+        # 解析数据
+        score = data['fear_and_greed']['score']
+        rating = data['fear_and_greed']['rating'] # 如 "Extreme Greed"
+        
+        # 格式化输出
+        return f"{score:.0f} ({rating})"
+    except Exception as e:
+        return f"N/A (获取失败: {str(e)})"
+
 def run_analysis():
     # 检查全局变量 final_api_key 是否存在且有效
     if 'final_api_key' not in globals() or not final_api_key:
@@ -306,6 +332,16 @@ def run_analysis():
     market_data = ""
     all_news_titles = [] 
     
+# === 新增：获取恐慌指数 ===
+    status_text.text("😨 正在探测市场情绪 (CNN Fear & Greed)...")
+    fng_score = get_cnn_fear_and_greed()
+    
+    # 在第一个 Tab (市场总览) 顶部直接展示
+    with tabs[0]:
+        st.markdown(f"### 🌡️ 市场情绪仪表盘")
+        st.metric("CNN 恐慌贪婪指数", fng_score, help="0=极度恐慌, 100=极度贪婪")
+        st.divider()
+
     # 计算总步数
     total_assets = sum(len(v) for v in WATCHLIST_GROUPS.values())
     total_topics = len(SPECIAL_TOPICS)
@@ -429,6 +465,9 @@ FRED_API_KEY = "你的_API_KEY"
     --- 🔢 权威宏观数据 (FRED) ---
     {macro_hard_data}  <-- 这里插入精准数值
     
+    --- 🌡️ 市场情绪 (Sentiment) ---    <--- 新增这一段
+    CNN Fear & Greed Index: {fng_score}
+
     --- 📰 市场叙事 ---
     {unique_news_titles}
     
@@ -444,6 +483,7 @@ FRED_API_KEY = "你的_API_KEY"
     5. **流动性真伪验证 (BTC vs Yields)**：检查比特币(BTC-USD)与10年期美债(^TNX)的关系。如果美债收益率飙升（通常利空风险资产），但BTC依然坚挺甚至创新高，说明市场正在交易"法币贬值"或"财政赤字失控"逻辑，这对硬资产（包括科技巨头）是深层支撑。
     6. **川普交易修正**：如果新闻提及关税，检查美元(DXY)是否走强？这对新兴市场(EEM/FXI)是直接打击。
     7. **硬数据 vs 软数据**：对比情绪指标(PMI)与实锤数据(失业金/非农/ADP)。如果PMI差但就业强，定义为"软着陆"而非衰退。
+    8. **情绪反指验证**：如果 CNN 恐慌贪婪指数显示“极度贪婪({fng_score})”且 VIX 处于低位，警惕市场是否过于自满(Complacency)，此时利好消息可能不再推动上涨。
 
     ### 写作约束
     1. **语气**：冷峻、客观、数据驱动。拒绝模棱两可的废话（如"市场可能涨也可能跌"）。
