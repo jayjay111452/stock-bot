@@ -122,6 +122,7 @@ SPECIAL_TOPICS = [
     "US Non-farm payrolls unemployment rate",           # 就业/非农
     "US ADP National Employment Report private payrolls", # 【新增】ADP 小非农 (非农前瞻)
     "US unemployment rate jobless claims data",         # 【新增】失业率 + 初请失业金 (高频与低频结合)
+    "US Initial and Continuing Jobless Claims report", # 强制覆盖：初请(裁员力度) + 续请(再就业难度)
     
     # --- 🏛️ 政治与大选 (新增川普/新政) ---
     "Donald Trump economic policy tariffs trade",       # 【新增】川普经济学 (关税/贸易/制造业)
@@ -159,32 +160,33 @@ from datetime import datetime, timedelta # <--- 必须导入这个库
 
 def get_macro_hard_data():
     """
-    从 FRED 获取精准的宏观经济硬数据 (CPI, PCE, 失业率, 非农)
+    从 FRED 获取精准的宏观经济硬数据 (CPI, PCE, 失业率, 非农, 失业金)
     """
     if not HAS_FRED:
         return "⚠️ 未配置 FRED API Key，无法获取精准宏观数据。请继续依赖新闻。"
 
     data_summary = ""
     
-    # 定义我们要抓取的数据 ID (FRED Series ID)
+    # === 1. 定义数据 ID (新增 Initial & Continued Claims) ===
     indicators = {
-        "CPI (消费者物价指数)": "CPIAUCSL",  # 原始指数，需计算同比
-        "PCE (个人消费支出)": "PCEPI",      # 原始指数，需计算同比
-        "Unemployment Rate (失业率)": "UNRATE", # 直接是百分比
-        "Non-Farm Payrolls (非农就业)": "PAYEMS", # 总人数，需计算增量
-        "10Y Treasury Yield (10年美债)": "DGS10" # 收益率
+        "CPI (消费者物价指数)": "CPIAUCSL",
+        "PCE (个人消费支出)": "PCEPI",
+        "Unemployment Rate (失业率)": "UNRATE",
+        "Non-Farm Payrolls (非农就业)": "PAYEMS",
+        "10Y Treasury Yield (10年美债)": "DGS10",
+        # --- 新增高频就业数据 ---
+        "Initial Jobless Claims (初请失业金)": "ICSA", # 周度，季节性调整
+        "Continuing Claims (续请失业金)": "CCSA"     # 周度，季节性调整
     }
 
     data_summary += "--- 🔢 官方宏观硬数据 (FRED Verified) ---\n"
-
-    # === 修复点：计算"2年前"的日期，确保只抓取最近的数据 ===
-    # 比如：今天2025年，start_date 就是 2023年
+    
+    # 计算2年前日期，确保只抓取最近数据
     start_date = (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')
 
     try:
         for name, series_id in indicators.items():
-            # === 修复点：使用 observation_start 替代 limit ===
-            # 这样 FRED 就会只返回从 start_date 到现在的最新数据
+            # 获取数据
             series = fred.get_series(series_id, observation_start=start_date).dropna()
             
             if series.empty:
@@ -194,25 +196,31 @@ def get_macro_hard_data():
             latest_val = series.iloc[-1]
             prev_val = series.iloc[-2]
 
-            # 针对不同数据做格式化处理
+            # === 2. 针对不同数据做格式化处理 ===
+            
             if "CPI" in name or "PCE" in name:
-                # 计算年率 (YoY): (当前值 - 12个月前值) / 12个月前值
                 if len(series) >= 13:
-                    year_ago_val = series.iloc[-13] # 取倒数第13个（一年前）
+                    year_ago_val = series.iloc[-13]
                     yoy = ((latest_val - year_ago_val) / year_ago_val) * 100
                     display_val = f"{yoy:.2f}% (YoY)"
                 else:
-                    display_val = f"Index {latest_val:.1f} (数据不足1年)"
+                    display_val = f"Index {latest_val:.1f}"
             
             elif "Non-Farm" in name:
-                # 计算月度新增 (Change): 当前 - 上个月
-                change = (latest_val - prev_val) # 单位通常是千人
+                change = (latest_val - prev_val)
                 display_val = f"Total {latest_val:,.0f}k | Change: {change:+,.0f}k"
             
             elif "Rate" in name or "Yield" in name:
-                # 直接显示百分比
                 display_val = f"{latest_val:.2f}%"
-            
+
+            # --- 新增：失业金数据格式化 (显示为 k) ---
+            elif "Claims" in name:
+                # FRED 数据单位通常是“人”，除以1000转换为 k
+                val_k = latest_val / 1000
+                change_k = (latest_val - prev_val) / 1000
+                # 格式：220k | Change: -2k (周环比)
+                display_val = f"{val_k:.0f}k | WoW: {change_k:+.0f}k"
+
             else:
                 display_val = f"{latest_val:.2f}"
 
@@ -230,17 +238,14 @@ def get_news(query):
     
     q_upper = query.upper()
 
-    # === 1. 月度/周期性宏观硬数据 ===
-    # 修改：将 30d 改为 14d。
-    # 如果数据是2周前发布的，它已经不是"News"了，而是"History"。
+    # === 1. 宏观硬数据关键词 ===
     macro_keywords = [
-        "CPI", "PCE", "INFLATION",        # 通胀
-        "PAYROLL", "NON-FARM", "JOBS",    # 非农/就业
-        "UNEMPLOYMENT",                   # 失业率
-        "PMI", "ISM",                     # 采购经理人指数
-        "INTEREST RATE", "FED DECISION",  # 利率决议
-        "GDP",                            # GDP
-        "HOUSING STARTS", "RESIDENTIAL"   # 房地产数据
+        "CPI", "PCE", "INFLATION",
+        "PAYROLL", "NON-FARM", "JOBS", "HIRES",
+        "UNEMPLOYMENT", "CLAIMS", "JOBLESS",  # <--- 新增 CLAIMS, JOBLESS
+        "PMI", "ISM",
+        "INTEREST RATE", "FED DECISION",
+        "GDP"
     ]
 
     # === 2. 政策/官员讲话/财政/贸易 (Policy & Narrative) -> 7天 ===
@@ -257,13 +262,17 @@ def get_news(query):
         "REGULATION", "ANTITRUST"         # 监管
     ]
 
-    # === 逻辑判断 ===
+# === 逻辑判断 (优化时间窗口) ===
     if any(k in q_upper for k in macro_keywords):
-        time_window = "when:14d"  # <--- 从 30d 改为 14d
+        # 特殊处理：如果是周度数据(CLAIMS)，强制 7天；月度数据用 14天
+        if "CLAIMS" in q_upper or "JOBLESS" in q_upper:
+             time_window = "when:7d" # <--- 周度数据极度敏感，过期无效
+        else:
+             time_window = "when:14d"
     elif any(k in q_upper for k in policy_keywords):
-        time_window = "when:7d"   # 政策类保持 7d 或更短
+        time_window = "when:7d"
     else:
-        time_window = "when:3d"   # 个股/突发 默认 3d
+        time_window = "when:3d"
 
     # 生成搜索链接
     search_query = f"{query} {time_window}"
