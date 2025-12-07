@@ -42,7 +42,7 @@ with st.sidebar:
     else:
         st.error("❌ 未检测到 Key，请先配置")
 
-    st.info("提示：由于监控标的增加到40+个，完整扫描可能需要 1-2 分钟，请耐心等待。")
+    st.info("提示：由于Google收紧免费API使用政策，AI模型从2.5 Pro变更为2.5 Flash。")
 
 # === 核心逻辑：资产分组清单 ===
 WATCHLIST_GROUPS = {
@@ -321,7 +321,7 @@ def run_analysis():
 
     # 使用选定的 Key 进行配置
     genai.configure(api_key=final_api_key.strip(), transport='rest')
-    model = genai.GenerativeModel('gemini-2.5-pro')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     # 界面初始化
     status_text = st.empty()
