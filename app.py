@@ -329,7 +329,7 @@ def run_analysis():
 
     # 使用选定的 Key 进行配置
     genai.configure(api_key=final_api_key.strip(), transport='rest')
-    model = genai.GenerativeModel('gemini-3-pro-preview')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     # 界面初始化
     status_text = st.empty()
