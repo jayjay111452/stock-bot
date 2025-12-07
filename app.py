@@ -118,7 +118,8 @@ SPECIAL_TOPICS = [
     # --- 📊 关键经济指引 (新增 PMI) ---
     "US ISM Manufacturing PMI report",                  # 制造业 PMI (关注是否萎缩)
     "US ISM Services PMI report economy",               # 服务业 PMI (美国经济的核心支柱)
-    "US inflation CPI PCE data report",                 # 通胀数据
+    "US inflation CPI PCE data report",                 # 一般通胀
+    "US Core PCE Price Index inflation report",         # 【新增】核心PCE (剔除能源食品)
     "US Non-farm payrolls unemployment rate",           # 就业/非农
     "US ADP National Employment Report private payrolls", # 【新增】ADP 小非农 (非农前瞻)
     "US unemployment rate jobless claims data",         # 【新增】失业率 + 初请失业金 (高频与低频结合)
@@ -170,7 +171,8 @@ def get_macro_hard_data():
     # === 1. 定义数据 ID (新增 Initial & Continued Claims) ===
     indicators = {
         "CPI (消费者物价指数)": "CPIAUCSL",
-        "PCE (个人消费支出)": "PCEPI",
+        "PCE (名义PCE物价指数)": "PCEPI",          # Headline PCE
+        "Core PCE (核心PCE - 联储锚点)": "PCEPILFE", # 【新增】Core PCE (Ex Food & Energy)
         "Unemployment Rate (失业率)": "UNRATE",
         "Non-Farm Payrolls (非农就业)": "PAYEMS",
         "10Y Treasury Yield (10年美债)": "DGS10",
@@ -202,7 +204,7 @@ def get_macro_hard_data():
                 if len(series) >= 13:
                     year_ago_val = series.iloc[-13]
                     yoy = ((latest_val - year_ago_val) / year_ago_val) * 100
-                    display_val = f"{yoy:.2f}% (YoY)"
+                    display_val = f"{yoy:.2f}% (YoY) | Index: {latest_val:.2f}"
                 else:
                     display_val = f"Index {latest_val:.1f}"
             
@@ -240,7 +242,7 @@ def get_news(query):
 
     # === 1. 宏观硬数据关键词 ===
     macro_keywords = [
-        "CPI", "PCE", "INFLATION",
+        "CPI", "PCE", "CORE PCE", "INFLATION", # 【更新】增加 CORE PCE
         "PAYROLL", "NON-FARM", "JOBS", "HIRES",
         "UNEMPLOYMENT", "CLAIMS", "JOBLESS",  # <--- 新增 CLAIMS, JOBLESS
         "PMI", "ISM",
@@ -264,11 +266,17 @@ def get_news(query):
 
 # === 逻辑判断 (优化时间窗口) ===
     if any(k in q_upper for k in macro_keywords):
-        # 特殊处理：如果是周度数据(CLAIMS)，强制 7天；月度数据用 14天
+        # 1. 周度数据 (Claims): 7天
         if "CLAIMS" in q_upper or "JOBLESS" in q_upper:
-             time_window = "when:7d" # <--- 周度数据极度敏感，过期无效
+             time_window = "when:7d"
+        # 2. 月度重磅通胀数据 (CPI/PCE): 14天
+        # PCE 数据发布后通常会有一周的深度发酵期，14天能确保覆盖“预测-发布-解读”全过程
+        elif "PCE" in q_upper or "CPI" in q_upper:
+             time_window = "when:14d"
+        # 3. 其他月度数据
         else:
              time_window = "when:14d"
+             
     elif any(k in q_upper for k in policy_keywords):
         time_window = "when:7d"
     else:
@@ -321,7 +329,7 @@ def run_analysis():
 
     # 使用选定的 Key 进行配置
     genai.configure(api_key=final_api_key.strip(), transport='rest')
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    model = genai.GenerativeModel('gemini-3-pro-preview')
     
     # 界面初始化
     status_text = st.empty()
@@ -507,6 +515,10 @@ FRED_API_KEY = "你的_API_KEY"
        - 首先检查每条新闻或数据的日期。
        - 例子：如果今天是 12月，看到“9月非农数据(Sept NFP)”，直接忽略或仅视为长期背景，**绝对不要**写在“核心叙事”里说“美国就业刚刚降温”。
        - **只关注最近 2 周内发生的边际变化**。
+    10. **通胀粘性拆解 (PCE vs Core PCE)**：
+       - 检查 **PCE (名义)** 与 **Core PCE (核心)** 的差值。
+       - 如果名义PCE下降（因油价跌），但 Core PCE 依然顽固（YoY > 2.8%），判定为“通胀粘性高”，这将迫使美联储维持高利率（Higher for Longer）。
+       - 如果两者双双回落，判定为“通胀退潮”，利好降息交易。
     
     ### 写作约束
     1. **语气**：冷峻、客观、数据驱动。拒绝模棱两可的废话（如"市场可能涨也可能跌"）。
@@ -535,6 +547,7 @@ FRED_API_KEY = "你的_API_KEY"
     > (这是分析的基石。结合10年期美债(^TNX)、美元指数(DX-Y)和日元(JPY=X)的走势。
     > (结合 **就业/通胀** 与 **比特币/美债** 进行定性。)
     > **核心关注**：
+    > * **通胀性质判定**：基于最新的 **Core PCE** 数据，当前的通胀是供给侧（油价）扰动，还是需求侧（服务业）顽疾？这决定了降息路径的快慢。
     > * **QT/QE 信号**：从新闻中判断美联储当前的缩表(QT)节奏是加速还是放缓？逆回购(RRP)资金释放是否对冲了缩表影响？
     > * **经济周期定位**：当前处于 [复苏 / 过热 / 滞胀 / 衰退恐慌] 的哪个阶段？(依据：PMI vs 失业率)
     > * **流动性温度计**：
