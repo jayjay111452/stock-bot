@@ -338,7 +338,7 @@ def run_analysis():
         base_url="https://api.x.ai/v1", # xAI 官方端点
     )
     # 使用 Grok 模型
-    model_name = "grok-4-0709"
+    model_name = "grok-4-1-fast-reasoning"
 
 
     # 界面初始化
@@ -586,7 +586,7 @@ FRED_API_KEY = "你的_API_KEY"
         completion = client.chat.completions.create(
             model=model_name,  # 前面定义的 "grok-4-0709"
             messages=[
-                {"role": "user", "content": prompt}
+                {prompt}
             ],
         )
         
