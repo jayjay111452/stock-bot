@@ -582,22 +582,11 @@ FRED_API_KEY = "你的_API_KEY"
     """
     
     try:
-        # === 更改 6: 调用 xAI Chat API ===
-        completion = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": "You are a professional Global Macro Hedge Fund CIO. Speak only in Chinese (Simpified)."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7 # 稍微增加创造性，适合撰写深度分析
-        )
-        
-        response_text = completion.choices[0].message.content
-        
+        response = model.generate_content(prompt)
         status_text.text("✅ 分析完成！")
-        st.success(f"深度分析报告已生成 (Model: {model_name})")
+        st.success("深度分析报告已生成")
         st.markdown("---")
-        st.markdown(response_text)
+        st.markdown(response.text)
     except Exception as e:
         st.error(f"AI 生成失败: {e}")
 
