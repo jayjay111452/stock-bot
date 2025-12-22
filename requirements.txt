@@ -4,3 +4,4 @@ feedparser
 requests
 google-generativeai
 fredapi
+openai>=1.0.0
