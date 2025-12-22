@@ -584,9 +584,9 @@ FRED_API_KEY = "你的_API_KEY"
     try:
         # === 修复：使用 OpenAI/Grok 客户端调用方式 ===
         completion = client.chat.completions.create(
-            model=model_name,  # 前面定义的 "grok-4-0709"
+            model=model_name,  # 前面定义的 "grok-4-1-fast-reasoning"
             messages=[
-                {"content":prompt}
+                {"role": "user", "content": prompt}
             ],
         )
         
