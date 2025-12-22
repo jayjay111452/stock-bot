@@ -582,11 +582,22 @@ FRED_API_KEY = "你的_API_KEY"
     """
     
     try:
-        response = model.generate_content(prompt)
+        # === 修复：使用 OpenAI/Grok 客户端调用方式 ===
+        completion = client.chat.completions.create(
+            model=model_name,  # 前面定义的 "grok-4-0709"
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+        )
+        
+        # 获取返回内容
+        analysis_content = completion.choices[0].message.content
+
         status_text.text("✅ 分析完成！")
         st.success("深度分析报告已生成")
         st.markdown("---")
-        st.markdown(response.text)
+        st.markdown(analysis_content)
+        
     except Exception as e:
         st.error(f"AI 生成失败: {e}")
 
