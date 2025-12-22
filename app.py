@@ -586,7 +586,7 @@ FRED_API_KEY = "你的_API_KEY"
         completion = client.chat.completions.create(
             model=model_name,  # 前面定义的 "grok-4-0709"
             messages=[
-                {prompt}
+                {"content":prompt}
             ],
         )
         
