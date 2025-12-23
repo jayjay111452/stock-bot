@@ -329,7 +329,7 @@ def run_analysis():
 
     # 使用选定的 Key 进行配置
     genai.configure(api_key=final_api_key.strip(), transport='rest')
-    model = genai.GenerativeModel('gemini-2.5-flash')
+    model = genai.GenerativeModel('gemini-3-pro-preview')
     
     # 界面初始化
     status_text = st.empty()
@@ -538,6 +538,9 @@ FRED_API_KEY = "你的_API_KEY"
     > --- (此处插入分割线) ---
     >
     > * **核心事件**：(下一条新闻...)
+
+    > --- (此处插入分割线) ---
+    > 
     > ...
 
     # 1. 🌡️ 市场广度与背离 (Market Breadth & Divergence)
