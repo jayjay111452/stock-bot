@@ -4,25 +4,24 @@ import feedparser
 import requests
 import time
 from urllib.parse import quote
-#import google.generativeai as genai
-from openai import OpenAI
+import google.generativeai as genai
 from datetime import datetime, timedelta
 
 # === 页面设置 ===
 st.set_page_config(page_title="美股全景AI雷达", page_icon="📡", layout="wide")
 st.title("📡 美股全景AI雷达")
-st.caption("Powered by Grok4 & Yahoo Finance | 全球宏观/科技/周期/避险")
+st.caption("Powered by Google Gemini 2.5 & Yahoo Finance | 全球宏观/科技/周期/避险")
 
 # === 侧边栏：配置 ===
 with st.sidebar:
     st.header("⚙️ 控制台")
     
     # 1. 获取用户输入的 Key
-    user_api_key = st.text_input("xAI API Key", type="password", help="前往控制台获取: https://console.x.ai/")
+    user_api_key = st.text_input("Google API Key", type="password", help="即刻申请: https://aistudio.google.com/")
     
     # 2. 尝试从 Secrets 获取公共演示 Key
-    # 建议在 .streamlit/secrets.toml 中配置 XAI_API_KEY
-    system_api_key = st.secrets.get("XAI_API_KEY", None) # <--- 更改 4: 建议更改 Secret 变量名
+    # 注意：这里的名字 GEMINI_DEMO_KEY 必须和你 Streamlit 后台 Secrets 里设置的一模一样
+    system_api_key = st.secrets.get("GEMINI_DEMO_KEY", None)
     
     # 3. 决定最终使用的 Key
     if user_api_key:
@@ -329,18 +328,9 @@ def run_analysis():
         return
 
     # 使用选定的 Key 进行配置
-    #genai.configure(api_key=final_api_key.strip(), transport='rest')
-    #model = genai.GenerativeModel('gemini-2.5-flash')
+    genai.configure(api_key=final_api_key.strip(), transport='rest')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
-    # === 更改 5: 配置 xAI 客户端 ===
-    client = OpenAI(
-        api_key=final_api_key.strip(),
-        base_url="https://api.x.ai/v1", # xAI 官方端点
-    )
-    # 使用 Grok 模型
-    model_name = "grok-4-1-fast-reasoning"
-
-
     # 界面初始化
     status_text = st.empty()
     progress_bar = st.progress(0)
@@ -582,22 +572,11 @@ FRED_API_KEY = "你的_API_KEY"
     """
     
     try:
-        # === 修复：使用 OpenAI/Grok 客户端调用方式 ===
-        completion = client.chat.completions.create(
-            model=model_name,  # 前面定义的 "grok-4-1-fast-reasoning"
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-        )
-        
-        # 获取返回内容
-        analysis_content = completion.choices[0].message.content
-
+        response = model.generate_content(prompt)
         status_text.text("✅ 分析完成！")
         st.success("深度分析报告已生成")
         st.markdown("---")
-        st.markdown(analysis_content)
-        
+        st.markdown(response.text)
     except Exception as e:
         st.error(f"AI 生成失败: {e}")
 
