@@ -42,7 +42,7 @@ with st.sidebar:
     else:
         st.error("❌ 未检测到 Key，请先配置")
 
-    st.info("提示：AI模型变更为Gemini3.0 Pro，请使用自由API key。")
+    st.info("提示：AI模型变更为Gemini3.0 Pro，请使用自有API key。")
 
 # === 核心逻辑：资产分组清单 ===
 WATCHLIST_GROUPS = {
