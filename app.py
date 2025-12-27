@@ -42,7 +42,7 @@ with st.sidebar:
     else:
         st.error("❌ 未检测到 Key，请先配置")
 
-    st.info("提示：由于Google收紧免费API使用政策，AI模型从2.5 Pro变更为2.5 Flash。")
+    st.info("提示：AI模型变更为Gemini3.0 Pro，请使用自由API key。")
 
 # === 核心逻辑：资产分组清单 ===
 WATCHLIST_GROUPS = {
@@ -538,6 +538,7 @@ FRED_API_KEY = "你的_API_KEY"
     4. **时效性适应**：基于数据中的价格涨跌幅和新闻时间，自动判断分析的时间跨度（是日内波动还是周度趋势）。
 
     ### 报告正文结构
+    >输出date(格式：YYYY-MM-DD)和subject(一句话总结行情)
 
     # 📰 核心叙事与噪音过滤 (Narrative & Signal)
     > **CIO 警告**：仅筛选 **最近 2 周内** 真正改变预期的事件。如果近期无大事，直接写“当前处于数据真空期，市场由情绪/资金流主导”。
