@@ -105,14 +105,34 @@ class MarketRadarSystem:
         }
 
     def plot_sector_heatmap(self, data):
-        """绘制简单的行业强弱横向柱状图"""
+        """绘制行业强弱横向柱状图 (修复中文乱码，使用英文标签)"""
+        
+        # 定义中英文映射 (仅用于图表显示)
+        sector_map_en = {
+            '科技': 'Technology (XLK)', 
+            '工业': 'Industrial (XLI)', 
+            '材料': 'Materials (XLB)', 
+            '能源': 'Energy (XLE)',
+            '金融': 'Financials (XLF)', 
+            '医疗': 'Healthcare (XLV)', 
+            '可选': 'Cons. Disc (XLY)', 
+            '必选': 'Cons. Staples (XLP)',
+            '通信': 'Comm. Svcs (XLC)', 
+            '地产': 'Real Estate (XLRE)', 
+            '公用': 'Utilities (XLU)'
+        }
+
         # 计算过去 20 天的涨幅
         sector_perf = {}
-        for ticker, name in self.sectors.items():
+        for ticker, cn_name in self.sectors.items():
             try:
                 hist = data[ticker]
+                # 计算涨幅
                 pct_change = (hist.iloc[-1] - hist.iloc[-20]) / hist.iloc[-20] * 100
-                sector_perf[name] = pct_change
+                
+                # 将中文名转换为英文名用于绘图
+                en_name = sector_map_en.get(cn_name, ticker)
+                sector_perf[en_name] = pct_change
             except:
                 continue
         
@@ -120,11 +140,26 @@ class MarketRadarSystem:
         df_perf = pd.DataFrame(list(sector_perf.items()), columns=['Sector', 'Change'])
         df_perf = df_perf.sort_values('Change', ascending=True)
         
+        # 绘图
         fig, ax = plt.subplots(figsize=(8, 5))
-        colors = ['red' if x < 0 else 'green' for x in df_perf['Change']]
-        ax.barh(df_perf['Sector'], df_perf['Change'], color=colors)
-        ax.set_title("Sector Rotation (20-Day Performance)", fontsize=10)
-        ax.set_xlabel("% Change")
+        
+        # 设定颜色：涨(绿) 跌(红) -> 注意：美股习惯是 绿涨红跌，或者 绿跌红涨(国内)，这里用国际通用的 绿涨红跌
+        colors = ['#d32f2f' if x < 0 else '#388e3c' for x in df_perf['Change']]
+        
+        bars = ax.barh(df_perf['Sector'], df_perf['Change'], color=colors)
+        
+        # 样式美化
+        ax.set_title("Sector Rotation (20-Day Performance)", fontsize=12, fontweight='bold')
+        ax.set_xlabel("% Change", fontsize=10)
+        ax.grid(axis='x', linestyle='--', alpha=0.3)
+        
+        # 在柱子旁标注具体数值
+        for bar in bars:
+            width = bar.get_width()
+            label_x_pos = width if width > 0 else width - 0.5 # 调整标签位置
+            ax.text(label_x_pos, bar.get_y() + bar.get_height()/2, f'{width:.1f}%', 
+                    va='center', fontsize=9, color='black')
+
         plt.tight_layout()
         return fig
 
