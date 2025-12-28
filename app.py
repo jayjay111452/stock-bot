@@ -193,7 +193,7 @@ with st.sidebar:
     if key_type == "user":
         st.success("✅ 使用您的个人 Key (速度快/隐私)")
     elif key_type == "system":
-        st.warning("⚠️ 取消使用模式，请使用自有API key")
+        st.warning("⚠️ 取消试用模式，请使用自有API key")
     else:
         st.error("❌ 未检测到 Key，请先配置")
 
