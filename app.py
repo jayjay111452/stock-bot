@@ -10,6 +10,124 @@ import matplotlib.pyplot as plt # <--- 新增绘图库
 import pandas as pd
 from fredapi import Fred
 
+# === 新增模块：全景红绿灯系统 (Market Radar System) ===
+class MarketRadarSystem:
+    def __init__(self):
+        self.sectors = {
+            'XLK': '科技', 'XLI': '工业', 'XLB': '材料', 'XLE': '能源',
+            'XLF': '金融', 'XLV': '医疗', 'XLY': '可选', 'XLP': '必选',
+            'XLC': '通信', 'XLRE': '地产', 'XLU': '公用'
+        }
+        self.tickers = ['SPY', 'RSP', '^VIX'] + list(self.sectors.keys())
+        
+    def get_data(self):
+        """批量获取过去 1 年的数据"""
+        # 批量下载以提高速度
+        data = yf.download(self.tickers, period="1y", auto_adjust=True)['Close']
+        return data
+
+    def analyze_traffic_light(self, data):
+        """
+        核心算法：计算红绿灯状态
+        逻辑：
+        1. 趋势分 (40%): SPY 与 RSP 是否都在 20日/50日均线之上？
+        2. 结构分 (30%): 广度 (RSP/SPY) 是否在上升？
+        3. 攻击分 (30%): 进攻型板块 (XLK/XLI) 是否跑赢 防御型板块 (XLU/XLP)？
+        """
+        score = 0
+        reasons = []
+        
+        # --- 1. 趋势判定 (Trend) ---
+        spy = data['SPY']
+        spy_ma50 = spy.rolling(50).mean().iloc[-1]
+        spy_curr = spy.iloc[-1]
+        
+        if spy_curr > spy_ma50:
+            score += 20
+            reasons.append("✅ 大盘(SPY) 位于 50日生命线上方")
+        else:
+            reasons.append("⚠️ 大盘(SPY) 跌破 50日生命线")
+
+        # --- 2. 广度判定 (Structure) ---
+        rsp = data['RSP']
+        breadth_ratio = rsp / spy
+        breadth_ma20 = breadth_ratio.rolling(20).mean().iloc[-1]
+        breadth_curr = breadth_ratio.iloc[-1]
+        
+        if breadth_curr > breadth_ma20:
+            score += 30
+            reasons.append("✅ 市场广度 (RSP/SPY) 正在走强 (中小票复苏)")
+        else:
+            reasons.append("⚠️ 市场广度走弱 (巨头吸血/背离)")
+
+        # --- 3. 行业攻击性判定 (Rotation) ---
+        # 进攻组: XLK(科技) + XLI(工业)
+        # 防御组: XLU(公用) + XLP(必选)
+        offense = (data['XLK'] + data['XLI']) / 2
+        defense = (data['XLU'] + data['XLP']) / 2
+        
+        ratio_od = offense / defense
+        ratio_od_ma20 = ratio_od.rolling(20).mean().iloc[-1]
+        
+        if ratio_od.iloc[-1] > ratio_od_ma20:
+            score += 30
+            reasons.append("✅ 资金正在流向进攻板块 (科技/工业)")
+        else:
+            reasons.append("🛡️ 资金流向防御板块 (避险模式)")
+
+        # --- 4. 恐慌指数修正 (Sentiment) ---
+        vix = data['^VIX'].iloc[-1]
+        if vix < 15:
+            score += 10
+            reasons.append("✅ VIX 低位 (情绪稳定)")
+        elif vix > 25:
+            score -= 20 # 极度恐慌扣分
+            reasons.append("🛑 VIX 飙升 (恐慌模式)")
+            
+        # --- 判定红绿灯 ---
+        if score >= 70:
+            status = "🟢 绿灯 (积极进攻)"
+            color_code = "green"
+        elif score >= 40:
+            status = "🟡 黄灯 (震荡/观察)"
+            color_code = "orange"
+        else:
+            status = "🔴 红灯 (防守/空仓)"
+            color_code = "red"
+            
+        return {
+            "status": status,
+            "color": color_code,
+            "score": score,
+            "reasons": reasons,
+            "vix": vix,
+            "sector_data": data # 返回原始数据用于绘图
+        }
+
+    def plot_sector_heatmap(self, data):
+        """绘制简单的行业强弱横向柱状图"""
+        # 计算过去 20 天的涨幅
+        sector_perf = {}
+        for ticker, name in self.sectors.items():
+            try:
+                hist = data[ticker]
+                pct_change = (hist.iloc[-1] - hist.iloc[-20]) / hist.iloc[-20] * 100
+                sector_perf[name] = pct_change
+            except:
+                continue
+        
+        # 转为 DataFrame 并排序
+        df_perf = pd.DataFrame(list(sector_perf.items()), columns=['Sector', 'Change'])
+        df_perf = df_perf.sort_values('Change', ascending=True)
+        
+        fig, ax = plt.subplots(figsize=(8, 5))
+        colors = ['red' if x < 0 else 'green' for x in df_perf['Change']]
+        ax.barh(df_perf['Sector'], df_perf['Change'], color=colors)
+        ax.set_title("Sector Rotation (20-Day Performance)", fontsize=10)
+        ax.set_xlabel("% Change")
+        plt.tight_layout()
+        return fig
+
 # === 页面设置 ===
 st.set_page_config(page_title="美股全景AI雷达", page_icon="📡", layout="wide")
 st.title("📡 美股全景AI雷达")
@@ -343,15 +461,62 @@ def run_analysis():
     status_text = st.empty()
     progress_bar = st.progress(0)
     
-    # === 1. 数据准备 (FRED & 广度) ===
+# ==========================================
+    # 🚦 新增：启动全景红绿灯系统 (Traffic Light)
+    # ==========================================
+    status_text.text("🚥 正在启动全景红绿灯系统 (下载 VIX, 行业, 广度数据)...")
+    
+    # 1. 实例化雷达并计算
+    radar = MarketRadarSystem()
+    raw_data = radar.get_data()
+    radar_result = radar.analyze_traffic_light(raw_data)
+    
+    # 2. 获取恐慌指数 (CNN)
+    fng_score = get_cnn_fear_and_greed()
+    
+    # 3. 获取市场广度 (RSP vs SPY) - 复用之前的函数用于画图
+    breadth_fig, breadth_signal = analyze_market_breadth()
+
+    # === 界面展示：红绿灯仪表盘 ===
+    st.markdown("### 🚦 市场全景红绿灯 (Market Traffic Light)")
+    
+    # 使用 3 列布局
+    col_traffic, col_details, col_chart = st.columns([1, 1.5, 2])
+    
+    with col_traffic:
+        # 显示巨大的红绿灯状态
+        st.markdown(f"<h1 style='text-align: center; color: {radar_result['color']}'>{radar_result['status']}</h1>", unsafe_allow_html=True)
+        st.metric("综合得分 (0-100)", f"{radar_result['score']} 分")
+        st.metric("VIX 恐慌指数", f"{radar_result['vix']:.2f}")
+        st.metric("CNN 贪婪指数", fng_score)
+
+    with col_details:
+        st.markdown("**📊 决策依据:**")
+        for reason in radar_result['reasons']:
+            st.write(reason)
+            
+    with col_chart:
+        # 绘制行业强弱图
+        fig_sector = radar.plot_sector_heatmap(raw_data)
+        st.pyplot(fig_sector)
+
+    # 广度背离图折叠区
+    if breadth_fig:
+        with st.expander("📉 查看市场广度与背离图 (鳄鱼嘴监测)", expanded=False):
+            st.pyplot(breadth_fig)
+            st.info(breadth_signal)
+            
+    st.divider()
+    # ==========================================
+    # 🚦 红绿灯系统结束，下面接回原来的逻辑
+    # ==========================================
+
+    # === 1. 获取 FRED 硬数据 ===
     if HAS_FRED:
         status_text.text("🔢 正在连接美联储数据库 (FRED) 获取精准读数...")
         macro_hard_data = get_macro_hard_data()
     else:
         macro_hard_data = "⚠️ 未配置 FRED API Key，无法获取精准宏观数据。"
-
-    status_text.text("📊 正在计算市场广度与背离 (RSP vs SPY)...")
-    breadth_fig, breadth_signal = analyze_market_breadth()
 
     # === 创建标签页 ===
     tab_names = list(WATCHLIST_GROUPS.keys()) + ["🔍 宏观话题", "🔢 宏观数据 (FRED)"]
@@ -360,30 +525,13 @@ def run_analysis():
     market_data = ""
     all_news_titles = [] 
     
-    status_text.text("😨 正在探测市场情绪 (CNN Fear & Greed)...")
-    fng_score = get_cnn_fear_and_greed()
-    
-    # === Tab 0: 市场总览 (增加广度图) ===
-    with tabs[0]:
-        st.markdown(f"### 🌡️ 市场情绪与结构")
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            st.metric("CNN 恐慌贪婪指数", fng_score, help="0=极度恐慌, 100=极度贪婪")
-            st.info(f"💡 {breadth_signal}")
-        with col2:
-            if breadth_fig:
-                st.pyplot(breadth_fig)
-            else:
-                st.warning("广度数据获取失败")
-        st.divider()
-
     # 计算总步数
     total_assets = sum(len(v) for v in WATCHLIST_GROUPS.values())
     total_topics = len(SPECIAL_TOPICS)
     total_steps = total_assets + total_topics
     current_step = 0
 
-    # === 2. 分组抓取资产数据 ===
+    # === 2. 分组抓取资产数据 (原来的 Watchlist 代码) ===
     for i, (group_name, items) in enumerate(WATCHLIST_GROUPS.items()):
         with tabs[i]: 
             cols = st.columns(2)
@@ -453,7 +601,7 @@ def run_analysis():
 
     status_text.text("🤖 AI 正在基于全景数据撰写深度内参 (约需 10-20 秒)...")
     
-    # === AI 分析 ===
+    # === AI 分析 (Prompt 已更新以包含红绿灯数据) ===
     unique_news_titles = "\n".join(list(set(all_news_titles)))
     today_date = datetime.now().strftime('%Y-%m-%d')
 
@@ -466,6 +614,14 @@ def run_analysis():
     * **时效性红线**: 任何发布时间超过 30 天的数据（GDP除外），只能作为【背景趋势】，严禁作为【最新事件】。
 
     ### 输入数据
+
+    --- 🚦 市场红绿灯系统 (Traffic Light System) ---
+    状态: {radar_result['status']}
+    得分: {radar_result['score']}
+    VIX: {radar_result['vix']}
+    决策理由: {'; '.join(radar_result['reasons'])}
+    (CIO注意：这是你的核心仪表盘，如果状态是红灯或黄灯，请在报告开头直接发出警告。)
+
     --- 🔢 权威宏观数据 (FRED) ---
     {macro_hard_data}
     
@@ -482,11 +638,12 @@ def run_analysis():
     
     ### 核心思维框架 (Chain of Thought)
     在写作前，请在后台进行如下逻辑推演：
-    1. **交叉验证**：新闻说"利好"，但股价跌了？说明 Price-in。
-    2. **广度体检**：检查 'Market Breadth Analysis'。如果 SPY 涨但 RSP 跌（鳄鱼嘴），这是极度危险的信号，意味着资金在撤离大部分股票，只抱团巨头。
-    3. **流动性真伪**：美债收益率(^TNX)与BTC的背离关系。
-    4. **风险传导**：高收益债(HYG)是否出现裂痕？
-    5. **经济定位**：GDP(过去) vs PMI(现在) vs Claims(未来)。
+    1. **红绿灯定调**：首先看 Traffic Light System 的状态。如果是“红灯”，直接定调为防御/避险；如果是“绿灯”，定调为进攻。
+    2. **交叉验证**：新闻说"利好"，但股价跌了？说明 Price-in。
+    3. **广度体检**：检查 'Market Breadth Analysis'。如果 SPY 涨但 RSP 跌（鳄鱼嘴），这是极度危险的信号，意味着资金在撤离大部分股票，只抱团巨头。
+    4. **流动性真伪**：美债收益率(^TNX)与BTC的背离关系。
+    5. **风险传导**：高收益债(HYG)是否出现裂痕？
+    6. **经济定位**：GDP(过去) vs PMI(现在) vs Claims(未来)。
     
     ### 写作约束
     1. **语气**：冷峻、客观、数据驱动。拒绝模棱两可的废话（如"市场可能涨也可能跌"）。
@@ -497,6 +654,9 @@ def run_analysis():
     ### 报告正文结构
     >输出date(格式：YYYY-MM-DD)和subject(一句话总结行情)
 
+    # 🚦 市场全景红绿灯 (Traffic Light Verdict)
+    > (基于红绿灯系统的得分和理由，给出最直接的操作定调。解释为什么是绿/黄/红灯。)
+    
        # 📰 核心叙事与噪音过滤 (Narrative & Signal)
     > **CIO 警告**：仅筛选 **最近 2 周内** 真正改变预期的事件。如果近期无大事，直接写“当前处于数据真空期，市场由情绪/资金流主导”。
     > (**关键指令**：请开启“降噪模式”，从新闻池中仅筛选 3-5 条真正驱动资产定价的关键事件，忽略无关痛痒的噪音。每条新闻请严格按照以下格式输出：
