@@ -11,6 +11,63 @@ import pandas as pd
 from fredapi import Fred
 
 # === 新增模块：全景红绿灯系统 (Market Radar System) ===
+
+# 1. 独立的数据获取函数，加上缓存装饰器 (这是防止被封的关键)
+@st.cache_data(ttl=3600) # 数据缓存 1 小时，避免频繁请求
+def fetch_market_data(tickers):
+    """
+    带缓存和重试机制的数据下载函数
+    """
+    import requests
+    
+    # 修复A: 伪装成浏览器
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    })
+
+    try:
+        # 尝试方法 1: 批量下载 (速度快)
+        # print("尝试批量下载...")
+        data = yf.download(tickers, period="1y", interval="1d", auto_adjust=True, threads=True, session=session)
+        
+        # 检查是否真的下载到了数据
+        if data.empty or len(data) < 10:
+            raise ValueError("批量下载数据为空")
+            
+        # 处理 MultiIndex
+        if isinstance(data.columns, pd.MultiIndex):
+            if 'Close' in data.columns.levels[0]:
+                 data = data['Close']
+            else:
+                 # 这种情况下 yfinance 可能返回了由 (Price, Ticker) 组成的列
+                 try:
+                     data = data.xs('Close', level=0, axis=1)
+                 except:
+                     pass # 保持原样尝试处理
+
+        return data
+
+    except Exception as e:
+        # print(f"批量下载失败 ({e})，切换到逐个下载模式...")
+        # 尝试方法 2: 逐个下载 (速度慢但稳定)
+        data_dict = {}
+        for t in tickers:
+            try:
+                df = yf.download(t, period="1y", auto_adjust=True, session=session, progress=False)
+                if not df.empty:
+                    data_dict[t] = df['Close']
+                time.sleep(0.2) # 稍微停顿，防止被封
+            except:
+                continue
+        
+        if data_dict:
+            # 将字典合并为 DataFrame
+            combined_df = pd.DataFrame(data_dict)
+            return combined_df
+        else:
+            return pd.DataFrame() # 彻底失败
+
 class MarketRadarSystem:
     def __init__(self):
         self.sectors = {
@@ -21,55 +78,50 @@ class MarketRadarSystem:
         self.tickers = ['SPY', 'RSP', '^VIX'] + list(self.sectors.keys())
         
     def get_data(self):
-        """批量获取过去 1 年的数据 (修复 MultiIndex 和 NaN 问题)"""
-        # 1. 批量下载
-        # group_by='ticker' 有助于后续处理，threads=True 加速
-        raw_data = yf.download(self.tickers, period="1y", interval="1d", auto_adjust=True, threads=True)
+        """调用带缓存的下载函数"""
+        # 调用上面定义的缓存函数
+        raw_data = fetch_market_data(self.tickers)
         
-        # 2. 提取 'Close' 列并处理多层索引问题
-        # yfinance 新版本可能会返回 MultiIndex (Price, Ticker)
-        try:
-            if isinstance(raw_data.columns, pd.MultiIndex):
-                # 尝试直接获取 Close 层级
-                data = raw_data['Close']
-            else:
-                # 如果只有一层，假设就是 Close (极少情况)
-                data = raw_data
-        except Exception as e:
-            st.error(f"数据结构解析失败: {e}")
-            return pd.DataFrame()
+        if raw_data.empty:
+            return raw_data
 
-        # 3. 关键修复：清洗空值 (NaN)
-        # 如果 VIX 有数据但 SPY 没数据(时间戳不齐)，会导致 SPY 最后一行是 NaN，从而导致误判
-        # 使用 ffill() 用前一天的数据填充空洞，再 dropna() 去除开头的空数据
-        data = data.ffill().dropna()
-        
+        # 关键修复：清洗空值 (NaN)
+        # 1. 确保 SPY 存在
+        if 'SPY' not in raw_data.columns:
+            return pd.DataFrame() # 如果没有 SPY，数据无意义
+            
+        # 2. 填充数据 (解决 VIX 更新导致 SPY 为空的问题)
+        data = raw_data.ffill().dropna()
         return data
 
     def analyze_traffic_light(self, data):
-        """
-        核心算法：计算红绿灯状态
-        """
+        """核心算法：计算红绿灯状态"""
         score = 0
         reasons = []
         
         # 确保数据不为空
         if data.empty or 'SPY' not in data.columns:
             return {
-                "status": "⚪ 数据获取失败", "color": "gray", "score": 0,
-                "reasons": ["无法连接 Yahoo Finance"], "vix": 0, "sector_data": data
+                "status": "⚪ 数据获取失败", 
+                "color": "gray", 
+                "score": 0,
+                "reasons": ["网络连接超时 或 Yahoo API 限制", "建议：请稍后刷新页面或检查网络"], 
+                "vix": 0.00, 
+                "sector_data": data
             }
 
         # --- 1. 趋势判定 (Trend) ---
         spy = data['SPY']
-        # 再次确保取出的 Series 没有 NaN
+        if len(spy) < 50:
+             return {
+                "status": "⚪ 数据不足", "color": "gray", "score": 0,
+                "reasons": ["历史数据长度不足 50 天"], "vix": 0, "sector_data": data
+            }
+            
         spy_ma50 = spy.rolling(50).mean().iloc[-1]
         spy_curr = spy.iloc[-1]
         
-        # 增加容错：如果是 NaN，默认为跌破
-        if pd.isna(spy_curr) or pd.isna(spy_ma50):
-            reasons.append("⚠️ 数据不足，无法计算均线")
-        elif spy_curr > spy_ma50:
+        if spy_curr > spy_ma50:
             score += 20
             diff = (spy_curr - spy_ma50) / spy_ma50 * 100
             reasons.append(f"✅ 大盘(SPY) 站上 50日线 (+{diff:.1f}%)")
@@ -91,9 +143,9 @@ class MarketRadarSystem:
                 reasons.append("⚠️ 市场广度走弱 (巨头吸血/背离)")
 
         # --- 3. 行业攻击性判定 (Rotation) ---
-        # 确保所需列都存在
         cols = ['XLK', 'XLI', 'XLU', 'XLP']
-        if all(c in data.columns for c in cols):
+        # 只要有一半以上的板块数据存在，就尝试计算
+        if len([c for c in cols if c in data.columns]) == 4:
             offense = (data['XLK'] + data['XLI']) / 2
             defense = (data['XLU'] + data['XLP']) / 2
             
@@ -105,8 +157,6 @@ class MarketRadarSystem:
                 reasons.append("✅ 资金流向进攻板块 (科技/工业)")
             else:
                 reasons.append("🛡️ 资金流向防御板块 (避险模式)")
-        else:
-            reasons.append("⚪ 板块数据缺失，跳过结构分析")
 
         # --- 4. 恐慌指数修正 (Sentiment) ---
         if '^VIX' in data.columns:
@@ -118,7 +168,7 @@ class MarketRadarSystem:
                 score -= 20 
                 reasons.append(f"🛑 VIX 飙升 ({vix:.2f})")
         else:
-            vix = 0
+            vix = 0.00
             
         # --- 判定红绿灯 ---
         if score >= 70:
@@ -143,7 +193,10 @@ class MarketRadarSystem:
     def plot_sector_heatmap(self, data):
         """绘制行业强弱横向柱状图"""
         if data.empty:
-            return plt.figure()
+            # 返回一个空的图表对象，避免报错
+            fig, ax = plt.subplots()
+            ax.text(0.5, 0.5, "No Data Available", ha='center')
+            return fig
 
         sector_map_en = {
             '科技': 'Technology (XLK)', '工业': 'Industrial (XLI)', 
@@ -155,22 +208,19 @@ class MarketRadarSystem:
         }
 
         sector_perf = {}
-        # 调试：打印一下列名，确保 ticker 在里面
-        # st.write("Data Columns:", data.columns) 
         
         for ticker, cn_name in self.sectors.items():
-            # 关键修改：移除 try-except 的静默失败，增加存在性检查
             if ticker in data.columns:
                 hist = data[ticker]
-                # 防止数据长度不足
                 if len(hist) >= 20:
                     pct_change = (hist.iloc[-1] - hist.iloc[-20]) / hist.iloc[-20] * 100
                     en_name = sector_map_en.get(cn_name, ticker)
                     sector_perf[en_name] = pct_change
         
         if not sector_perf:
-            st.warning("未获取到足够的板块数据进行绘图")
-            return plt.figure()
+            fig, ax = plt.subplots()
+            ax.text(0.5, 0.5, "Sector Data Incomplete", ha='center')
+            return fig
 
         df_perf = pd.DataFrame(list(sector_perf.items()), columns=['Sector', 'Change'])
         df_perf = df_perf.sort_values('Change', ascending=True)
@@ -741,8 +791,8 @@ def run_analysis():
     > **CIO 警告**：仅筛选 **最近 2 周内** 真正改变预期的事件。如果近期无大事，直接写“当前处于数据真空期，市场由情绪/资金流主导”。
     > (**关键指令**：请开启“降噪模式”，从新闻池中仅筛选 3-5 条真正驱动资产定价的关键事件，忽略无关痛痒的噪音。每条新闻请严格按照以下格式输出：
     > * **核心事件**：用一句话精练概括新闻事实。
-    > * **逻辑传导**：深度分析该事件如何改变市场预期（如：降息预期落空 -> 杀估值 / 避险情绪升温 -> 资金流向美债）。
-    > * **定价影响**：[利多/利空: 具体的资产代码])
+    > * **逻辑传导**：深度分析该事件如何改变市场预期（如：降息预期落空 -> 杀估值 / 避险情绪升温 -> 资金流向美债。
+    > * **定价影响**：[利多/利空: 具体的资产代码]
     > * **格式要求：**严禁使用项目符号（* 或 -）作为每条新闻的开头**。每条新闻之间，必须插入一个标准的 Markdown 分割线 `---`。请严格遵守以下排版模板：)
 
     ### 核心事件：(这里写事件标题)
