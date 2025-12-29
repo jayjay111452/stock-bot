@@ -12,61 +12,70 @@ from fredapi import Fred
 
 # === 新增模块：全景红绿灯系统 (Market Radar System) ===
 
-# 1. 独立的数据获取函数，加上缓存装饰器 (这是防止被封的关键)
-@st.cache_data(ttl=3600) # 数据缓存 1 小时，避免频繁请求
+# 替换原有的 fetch_market_data 函数
+@st.cache_data(ttl=3600)
 def fetch_market_data(tickers):
     """
-    带缓存和重试机制的数据下载函数
+    带缓存、重试机制、且增强了多层索引清洗的数据下载函数
     """
     import requests
     
-    # 修复A: 伪装成浏览器
+    # 修复A: 伪装成较新的浏览器
     session = requests.Session()
     session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     })
 
     try:
-        # 尝试方法 1: 批量下载 (速度快)
-        # print("尝试批量下载...")
+        # print(f"尝试批量下载: {tickers}")
+        # 修复B: 显式指定 group_by='ticker' 以便后续处理，或者保持默认
         data = yf.download(tickers, period="1y", interval="1d", auto_adjust=True, threads=True, session=session)
         
-        # 检查是否真的下载到了数据
-        if data.empty or len(data) < 10:
+        if data.empty:
             raise ValueError("批量下载数据为空")
-            
-        # 处理 MultiIndex
+
+        # === 核心修复：更强健的 MultiIndex 清洗逻辑 ===
+        # yfinance 返回的列通常是 (Price, Ticker) 或者 (Ticker, Price) 这里的处理要非常小心
         if isinstance(data.columns, pd.MultiIndex):
+            # 情况 1: 列索引 Level 0 是 'Close' (常见于 auto_adjust=True)
             if 'Close' in data.columns.levels[0]:
-                 data = data['Close']
+                data = data['Close']
+            # 情况 2: 列索引 Level 1 是 'Close'
+            elif 'Close' in data.columns.levels[1]:
+                data = data.xs('Close', level=1, axis=1)
+            # 情况 3: 如果第一层就是 Ticker，且没有 Close (可能是单列数据被挤压)，尝试直接用
             else:
-                 # 这种情况下 yfinance 可能返回了由 (Price, Ticker) 组成的列
-                 try:
-                     data = data.xs('Close', level=0, axis=1)
-                 except:
-                     pass # 保持原样尝试处理
+                # 最后的尝试：如果只有 Close 数据，直接尝试提取
+                pass 
+        
+        # 确保只保留需要的 Ticker 列
+        valid_cols = [c for c in data.columns if c in tickers]
+        if valid_cols:
+            data = data[valid_cols]
 
         return data
 
     except Exception as e:
         # print(f"批量下载失败 ({e})，切换到逐个下载模式...")
-        # 尝试方法 2: 逐个下载 (速度慢但稳定)
         data_dict = {}
         for t in tickers:
             try:
+                # 逐个下载时，yfinance 返回的是单层索引 DataFrame
                 df = yf.download(t, period="1y", auto_adjust=True, session=session, progress=False)
                 if not df.empty:
-                    data_dict[t] = df['Close']
-                time.sleep(0.2) # 稍微停顿，防止被封
+                    if 'Close' in df.columns:
+                        data_dict[t] = df['Close']
+                    else:
+                        data_dict[t] = df.iloc[:, 0] # 盲取第一列
+                time.sleep(0.1) 
             except:
                 continue
         
         if data_dict:
-            # 将字典合并为 DataFrame
             combined_df = pd.DataFrame(data_dict)
             return combined_df
         else:
-            return pd.DataFrame() # 彻底失败
+            return pd.DataFrame()
 
 class MarketRadarSystem:
     def __init__(self):
@@ -388,25 +397,22 @@ try:
 except:
     HAS_FRED = False
 
-# === 新增功能：市场广度与背离分析 ===
+# 替换原有的 analyze_market_breadth 函数
 def analyze_market_breadth():
     """
     计算并绘制 RSP (等权) vs SPY (市值加权) 的背离情况
-    返回: figure对象, 信号文本
     """
     tickers = ['RSP', 'SPY']
     try:
-        # 获取过去1年的数据
-        data = yf.download(tickers, period="1y", auto_adjust=True)['Close']
+        # === 核心修复：复用带缓存和伪装头的 fetch_market_data，而不是自己裸连 ===
+        data = fetch_market_data(tickers)
         
-        # 简单清洗，防止 MultiIndex 问题
-        if isinstance(data.columns, pd.MultiIndex):
-             # 如果是多层索引，尝试扁平化或直接提取
-             pass # yfinance最近版本下载多个ticker时通常返回 (Date, Ticker) 结构
+        # 检查数据完整性
+        if data.empty or 'RSP' not in data.columns or 'SPY' not in data.columns:
+            return None, "⚠️ 无法获取 RSP 或 SPY 数据，无法绘制广度图。"
 
-        df = pd.DataFrame()
-        df['RSP'] = data['RSP']
-        df['SPY'] = data['SPY']
+        # 确保数据对齐，去除空值
+        df = data.dropna()
         
         # 1. 计算 RSP/SPY 比率 (Breadth Ratio)
         df['Breadth_Ratio'] = df['RSP'] / df['SPY']
@@ -414,7 +420,7 @@ def analyze_market_breadth():
         # 2. 归一化 (以第一天为 1.0)
         df['Normalized_Ratio'] = df['Breadth_Ratio'] / df['Breadth_Ratio'].iloc[0]
         df['SPY_Normalized'] = df['SPY'] / df['SPY'].iloc[0]
-        df['Ratio_MA20'] = df['Normalized_Ratio'].rolling(window=20).mean() # 20日均线趋势
+        df['Ratio_MA20'] = df['Normalized_Ratio'].rolling(window=20).mean()
 
         # 3. 绘图 (双轴)
         fig, ax1 = plt.subplots(figsize=(10, 4))
@@ -432,25 +438,32 @@ def analyze_market_breadth():
         color = 'tab:blue'
         ax2.set_ylabel('Market Breadth (RSP/SPY)', color=color, fontweight='bold')
         ax2.plot(df.index, df['Normalized_Ratio'], color=color, label='Breadth Ratio', linewidth=1.5)
-        ax2.plot(df.index, df['Ratio_MA20'], color=color, linestyle='--', alpha=0.3, linewidth=1)
+        
+        # 增加容错：只有数据够长才画均线
+        if len(df) > 20:
+            ax2.plot(df.index, df['Ratio_MA20'], color=color, linestyle='--', alpha=0.3, linewidth=1)
+            
         ax2.tick_params(axis='y', labelcolor=color)
 
         plt.title('Market Breadth Divergence (Red=Index, Blue=Breadth)', fontsize=10)
         plt.tight_layout()
 
         # 4. 生成信号逻辑
-        latest = df.iloc[-1]
-        prev_week = df.iloc[-5] # 一周前
-        
-        spy_trend = "UP" if latest['SPY_Normalized'] > prev_week['SPY_Normalized'] else "DOWN"
-        breadth_trend = "UP" if latest['Normalized_Ratio'] > prev_week['Normalized_Ratio'] else "DOWN"
-        
-        signal_text = f"Current Status: SPY Trend is {spy_trend}, Breadth(Equal Weight) Trend is {breadth_trend}."
-        
-        if spy_trend == "UP" and breadth_trend == "DOWN":
-            signal_text += " [⚠️ WARNING: DIVERGENCE DETECTED (Price High, Breadth Low)]"
-        elif spy_trend == "UP" and breadth_trend == "UP":
-            signal_text += " [✅ HEALTHY: Broad Participation]"
+        if len(df) >= 5:
+            latest = df.iloc[-1]
+            prev_week = df.iloc[-5]
+            
+            spy_trend = "UP" if latest['SPY_Normalized'] > prev_week['SPY_Normalized'] else "DOWN"
+            breadth_trend = "UP" if latest['Normalized_Ratio'] > prev_week['Normalized_Ratio'] else "DOWN"
+            
+            signal_text = f"Current Status: SPY Trend is {spy_trend}, Breadth(Equal Weight) Trend is {breadth_trend}."
+            
+            if spy_trend == "UP" and breadth_trend == "DOWN":
+                signal_text += " [⚠️ WARNING: DIVERGENCE DETECTED (Price High, Breadth Low)]"
+            elif spy_trend == "UP" and breadth_trend == "UP":
+                signal_text += " [✅ HEALTHY: Broad Participation]"
+        else:
+            signal_text = "Data insufficient for trend analysis."
             
         return fig, signal_text
 
