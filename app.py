@@ -21,68 +21,104 @@ class MarketRadarSystem:
         self.tickers = ['SPY', 'RSP', '^VIX'] + list(self.sectors.keys())
         
     def get_data(self):
-        """批量获取过去 1 年的数据"""
-        # 批量下载以提高速度
-        data = yf.download(self.tickers, period="1y", auto_adjust=True)['Close']
+        """批量获取过去 1 年的数据 (修复 MultiIndex 和 NaN 问题)"""
+        # 1. 批量下载
+        # group_by='ticker' 有助于后续处理，threads=True 加速
+        raw_data = yf.download(self.tickers, period="1y", interval="1d", auto_adjust=True, threads=True)
+        
+        # 2. 提取 'Close' 列并处理多层索引问题
+        # yfinance 新版本可能会返回 MultiIndex (Price, Ticker)
+        try:
+            if isinstance(raw_data.columns, pd.MultiIndex):
+                # 尝试直接获取 Close 层级
+                data = raw_data['Close']
+            else:
+                # 如果只有一层，假设就是 Close (极少情况)
+                data = raw_data
+        except Exception as e:
+            st.error(f"数据结构解析失败: {e}")
+            return pd.DataFrame()
+
+        # 3. 关键修复：清洗空值 (NaN)
+        # 如果 VIX 有数据但 SPY 没数据(时间戳不齐)，会导致 SPY 最后一行是 NaN，从而导致误判
+        # 使用 ffill() 用前一天的数据填充空洞，再 dropna() 去除开头的空数据
+        data = data.ffill().dropna()
+        
         return data
 
     def analyze_traffic_light(self, data):
         """
         核心算法：计算红绿灯状态
-        逻辑：
-        1. 趋势分 (40%): SPY 与 RSP 是否都在 20日/50日均线之上？
-        2. 结构分 (30%): 广度 (RSP/SPY) 是否在上升？
-        3. 攻击分 (30%): 进攻型板块 (XLK/XLI) 是否跑赢 防御型板块 (XLU/XLP)？
         """
         score = 0
         reasons = []
         
+        # 确保数据不为空
+        if data.empty or 'SPY' not in data.columns:
+            return {
+                "status": "⚪ 数据获取失败", "color": "gray", "score": 0,
+                "reasons": ["无法连接 Yahoo Finance"], "vix": 0, "sector_data": data
+            }
+
         # --- 1. 趋势判定 (Trend) ---
         spy = data['SPY']
+        # 再次确保取出的 Series 没有 NaN
         spy_ma50 = spy.rolling(50).mean().iloc[-1]
         spy_curr = spy.iloc[-1]
         
-        if spy_curr > spy_ma50:
+        # 增加容错：如果是 NaN，默认为跌破
+        if pd.isna(spy_curr) or pd.isna(spy_ma50):
+            reasons.append("⚠️ 数据不足，无法计算均线")
+        elif spy_curr > spy_ma50:
             score += 20
-            reasons.append("✅ 大盘(SPY) 位于 50日生命线上方")
+            diff = (spy_curr - spy_ma50) / spy_ma50 * 100
+            reasons.append(f"✅ 大盘(SPY) 站上 50日线 (+{diff:.1f}%)")
         else:
-            reasons.append("⚠️ 大盘(SPY) 跌破 50日生命线")
+            diff = (spy_ma50 - spy_curr) / spy_ma50 * 100
+            reasons.append(f"⚠️ 大盘(SPY) 跌破 50日线 (-{diff:.1f}%)")
 
         # --- 2. 广度判定 (Structure) ---
-        rsp = data['RSP']
-        breadth_ratio = rsp / spy
-        breadth_ma20 = breadth_ratio.rolling(20).mean().iloc[-1]
-        breadth_curr = breadth_ratio.iloc[-1]
-        
-        if breadth_curr > breadth_ma20:
-            score += 30
-            reasons.append("✅ 市场广度 (RSP/SPY) 正在走强 (中小票复苏)")
-        else:
-            reasons.append("⚠️ 市场广度走弱 (巨头吸血/背离)")
+        if 'RSP' in data.columns:
+            rsp = data['RSP']
+            breadth_ratio = rsp / spy
+            breadth_ma20 = breadth_ratio.rolling(20).mean().iloc[-1]
+            breadth_curr = breadth_ratio.iloc[-1]
+            
+            if breadth_curr > breadth_ma20:
+                score += 30
+                reasons.append("✅ 市场广度 (RSP/SPY) 走强 (中小票复苏)")
+            else:
+                reasons.append("⚠️ 市场广度走弱 (巨头吸血/背离)")
 
         # --- 3. 行业攻击性判定 (Rotation) ---
-        # 进攻组: XLK(科技) + XLI(工业)
-        # 防御组: XLU(公用) + XLP(必选)
-        offense = (data['XLK'] + data['XLI']) / 2
-        defense = (data['XLU'] + data['XLP']) / 2
-        
-        ratio_od = offense / defense
-        ratio_od_ma20 = ratio_od.rolling(20).mean().iloc[-1]
-        
-        if ratio_od.iloc[-1] > ratio_od_ma20:
-            score += 30
-            reasons.append("✅ 资金正在流向进攻板块 (科技/工业)")
+        # 确保所需列都存在
+        cols = ['XLK', 'XLI', 'XLU', 'XLP']
+        if all(c in data.columns for c in cols):
+            offense = (data['XLK'] + data['XLI']) / 2
+            defense = (data['XLU'] + data['XLP']) / 2
+            
+            ratio_od = offense / defense
+            ratio_od_ma20 = ratio_od.rolling(20).mean().iloc[-1]
+            
+            if ratio_od.iloc[-1] > ratio_od_ma20:
+                score += 30
+                reasons.append("✅ 资金流向进攻板块 (科技/工业)")
+            else:
+                reasons.append("🛡️ 资金流向防御板块 (避险模式)")
         else:
-            reasons.append("🛡️ 资金流向防御板块 (避险模式)")
+            reasons.append("⚪ 板块数据缺失，跳过结构分析")
 
         # --- 4. 恐慌指数修正 (Sentiment) ---
-        vix = data['^VIX'].iloc[-1]
-        if vix < 15:
-            score += 10
-            reasons.append("✅ VIX 低位 (情绪稳定)")
-        elif vix > 25:
-            score -= 20 # 极度恐慌扣分
-            reasons.append("🛑 VIX 飙升 (恐慌模式)")
+        if '^VIX' in data.columns:
+            vix = data['^VIX'].iloc[-1]
+            if vix < 15:
+                score += 10
+                reasons.append(f"✅ VIX 低位 ({vix:.2f})")
+            elif vix > 25:
+                score -= 20 
+                reasons.append(f"🛑 VIX 飙升 ({vix:.2f})")
+        else:
+            vix = 0
             
         # --- 判定红绿灯 ---
         if score >= 70:
@@ -101,62 +137,55 @@ class MarketRadarSystem:
             "score": score,
             "reasons": reasons,
             "vix": vix,
-            "sector_data": data # 返回原始数据用于绘图
+            "sector_data": data 
         }
 
     def plot_sector_heatmap(self, data):
-        """绘制行业强弱横向柱状图 (修复中文乱码，使用英文标签)"""
-        
-        # 定义中英文映射 (仅用于图表显示)
+        """绘制行业强弱横向柱状图"""
+        if data.empty:
+            return plt.figure()
+
         sector_map_en = {
-            '科技': 'Technology (XLK)', 
-            '工业': 'Industrial (XLI)', 
-            '材料': 'Materials (XLB)', 
-            '能源': 'Energy (XLE)',
-            '金融': 'Financials (XLF)', 
-            '医疗': 'Healthcare (XLV)', 
-            '可选': 'Cons. Disc (XLY)', 
-            '必选': 'Cons. Staples (XLP)',
-            '通信': 'Comm. Svcs (XLC)', 
-            '地产': 'Real Estate (XLRE)', 
+            '科技': 'Technology (XLK)', '工业': 'Industrial (XLI)', 
+            '材料': 'Materials (XLB)', '能源': 'Energy (XLE)',
+            '金融': 'Financials (XLF)', '医疗': 'Healthcare (XLV)', 
+            '可选': 'Cons. Disc (XLY)', '必选': 'Cons. Staples (XLP)',
+            '通信': 'Comm. Svcs (XLC)', '地产': 'Real Estate (XLRE)', 
             '公用': 'Utilities (XLU)'
         }
 
-        # 计算过去 20 天的涨幅
         sector_perf = {}
-        for ticker, cn_name in self.sectors.items():
-            try:
-                hist = data[ticker]
-                # 计算涨幅
-                pct_change = (hist.iloc[-1] - hist.iloc[-20]) / hist.iloc[-20] * 100
-                
-                # 将中文名转换为英文名用于绘图
-                en_name = sector_map_en.get(cn_name, ticker)
-                sector_perf[en_name] = pct_change
-            except:
-                continue
+        # 调试：打印一下列名，确保 ticker 在里面
+        # st.write("Data Columns:", data.columns) 
         
-        # 转为 DataFrame 并排序
+        for ticker, cn_name in self.sectors.items():
+            # 关键修改：移除 try-except 的静默失败，增加存在性检查
+            if ticker in data.columns:
+                hist = data[ticker]
+                # 防止数据长度不足
+                if len(hist) >= 20:
+                    pct_change = (hist.iloc[-1] - hist.iloc[-20]) / hist.iloc[-20] * 100
+                    en_name = sector_map_en.get(cn_name, ticker)
+                    sector_perf[en_name] = pct_change
+        
+        if not sector_perf:
+            st.warning("未获取到足够的板块数据进行绘图")
+            return plt.figure()
+
         df_perf = pd.DataFrame(list(sector_perf.items()), columns=['Sector', 'Change'])
         df_perf = df_perf.sort_values('Change', ascending=True)
         
-        # 绘图
         fig, ax = plt.subplots(figsize=(8, 5))
-        
-        # 设定颜色：涨(绿) 跌(红) -> 注意：美股习惯是 绿涨红跌，或者 绿跌红涨(国内)，这里用国际通用的 绿涨红跌
         colors = ['#d32f2f' if x < 0 else '#388e3c' for x in df_perf['Change']]
-        
         bars = ax.barh(df_perf['Sector'], df_perf['Change'], color=colors)
         
-        # 样式美化
         ax.set_title("Sector Rotation (20-Day Performance)", fontsize=12, fontweight='bold')
         ax.set_xlabel("% Change", fontsize=10)
         ax.grid(axis='x', linestyle='--', alpha=0.3)
         
-        # 在柱子旁标注具体数值
         for bar in bars:
             width = bar.get_width()
-            label_x_pos = width if width > 0 else width - 0.5 # 调整标签位置
+            label_x_pos = width if width > 0 else width - 0.5 
             ax.text(label_x_pos, bar.get_y() + bar.get_height()/2, f'{width:.1f}%', 
                     va='center', fontsize=9, color='black')
 
