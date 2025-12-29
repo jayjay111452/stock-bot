@@ -758,7 +758,6 @@ def run_analysis():
     ---
     
     ...
-    """
 
     # 1. 🌡️ 市场广度与背离 (Market Breadth & Divergence)
     > (重点分析：根据输入的 Market Breadth Signal，当前是“健康的普涨”还是“虚假的指数繁荣”？结合 CNN 恐慌指数判断拥挤度。)
