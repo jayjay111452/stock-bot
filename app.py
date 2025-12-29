@@ -550,7 +550,7 @@ def run_analysis():
     
     with col_traffic:
         # 显示巨大的红绿灯状态
-        st.markdown(f"<h3 style='text-align: center; color: {radar_result['color']}'>{radar_result['status']}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h1 style='text-align: center; color: {radar_result['color']}'>{radar_result['status']}</h1>", unsafe_allow_html=True)
         st.metric("综合得分 (0-100)", f"{radar_result['score']} 分")
         st.metric("VIX 恐慌指数", f"{radar_result['vix']:.2f}")
         st.metric("CNN 贪婪指数", fng_score)
