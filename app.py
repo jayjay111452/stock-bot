@@ -26,7 +26,7 @@ LANG = "CN" if lang_option == "中文" else "EN"
 TRANS = {
     "CN": {
         "title": "📡 美股全景AI雷达",
-        "caption": "Powered by Google Gemini 3.0 Pro & Yahoo Finance | 全球宏观/科技/周期/避险",
+        "caption": "Powered by Google Gemini 3.0 Pro & Yahoo Finance | 宏观·广度·情绪·轮动",
         "sidebar_header": "⚙️ 控制台",
         "api_input": "Google API Key",
         "api_help": "即刻申请: https://aistudio.google.com/",
@@ -49,8 +49,8 @@ TRANS = {
         "tab_macro_data": "🔢 宏观数据 (FRED)"
     },
     "EN": {
-        "title": "📡 Global Market AI Radar",
-        "caption": "Powered by Google Gemini 3.0 Pro & Yahoo Finance | Macro/Tech/Cyclical/Safe Haven",
+        "title": "📡 US Market AI Radar",
+        "caption": "Powered by Google Gemini 3.0 Pro & Yahoo Finance | Macro·Breadth·Sentiment·Rotation",
         "sidebar_header": "⚙️ Control Panel",
         "api_input": "Google API Key",
         "api_help": "Get one here: https://aistudio.google.com/",
