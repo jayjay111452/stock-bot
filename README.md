@@ -82,5 +82,5 @@ website：https://stock-bot-jbz8eeyers25wnkkvytouy.streamlit.app
 
 ---
 <div align="center">
-  <p>Built with ❤️ by Oxide Dev Engineer</p>
+  <p>Built with ❤️ </p>
 </div>
