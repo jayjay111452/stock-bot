@@ -467,7 +467,7 @@ def analyze_market_breadth(lang="CN"):
         return None, f"Data Error: {str(e)}"
 
 def get_macro_hard_data(lang="CN"):
-    """从 FRED 获取数据，根据语言调整输出"""
+    """从 FRED 获取数据，根据语言调整输出 (带日期版)"""
     if not HAS_FRED:
         return "⚠️ FRED Key Missing." if lang=="EN" else "⚠️ 未配置 FRED API Key。"
 
@@ -482,8 +482,8 @@ def get_macro_hard_data(lang="CN"):
             "Unemployment Rate (失业率)": "UNRATE",
             "Non-Farm Payrolls (非农就业)": "PAYEMS",
             "10Y Treasury Yield (10年美债)": "DGS10",
-            "Initial Jobless Claims (初请)": "ICSA",
-            "Continuing Claims (续请失业金)": "CCSA"
+            "Initial Jobless Claims (初请失业金)": "ICSA",
+            "Continuing Claims (续请失业金)": "CCSA" 
         }
         header = "--- 🔢 官方宏观硬数据 (FRED Verified) ---\n"
     else:
@@ -496,7 +496,7 @@ def get_macro_hard_data(lang="CN"):
             "Non-Farm Payrolls": "PAYEMS",
             "10Y Treasury Yield": "DGS10",
             "Initial Jobless Claims": "ICSA",
-            "Continuing Claims": "CCSA"
+            "Continuing Claims": "CCSA" 
         }
         header = "--- 🔢 Official Macro Hard Data (FRED Verified) ---\n"
 
@@ -508,6 +508,9 @@ def get_macro_hard_data(lang="CN"):
             series = fred.get_series(series_id, observation_start=start_date).dropna()
             if series.empty: continue
 
+            # === 新增：获取数据日期 ===
+            latest_date = series.index[-1].strftime('%Y-%m-%d')
+            
             latest_val = series.iloc[-1]
             prev_val = series.iloc[-2]
 
@@ -530,7 +533,9 @@ def get_macro_hard_data(lang="CN"):
             else:
                 display_val = f"{latest_val:.2f}"
 
-            data_summary += f"* **{name}**: {display_val}\n"
+            # === 修改：输出时加上日期 ===
+            data_summary += f"* **{name}**: {display_val} [🗓️ {latest_date}]\n"
+            
     except Exception as e:
         return f"FRED Error: {str(e)}"
 
