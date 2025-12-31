@@ -558,13 +558,19 @@ def get_news(query):
 
 def get_cnn_fear_and_greed():
     url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Referer": "https://www.cnn.com/"
+    }
     try:
         r = requests.get(url, headers=headers, timeout=5)
+        r.raise_for_status()
         data = r.json()
-        return f"{data['fear_and_greed']['score']:.0f} ({data['fear_and_greed']['rating']})"
-    except:
-        return "N/A"
+        score = data['fear_and_greed']['score']
+        rating = data['fear_and_greed']['rating']
+        return f"{score:.0f} ({rating})"
+    except Exception as e:
+        return f"N/A (获取失败: {str(e)})"
 
 # === 渲染 UI ===
 st.title(T['title'])
