@@ -3,7 +3,7 @@
   <img src="https://img.shields.io/badge/Streamlit-1.40+-ff4b4b.svg" alt="Streamlit">
   <img src="https://img.shields.io/badge/AI-Gemini_3.0_Pro-4285F4.svg" alt="Gemini">
   <br>
-  <h1>📡 Stock-Bot: Global Market AI Radar</h1>
+  <h1>📡 Stock-Bot: US Market AI Radar</h1>
   <p>
     <strong>An institutional-grade AI financial decision system powered by Google Gemini 3.0 Pro.</strong>
   </p>
