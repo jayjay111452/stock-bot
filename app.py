@@ -476,7 +476,7 @@ def get_macro_hard_data(lang="CN"):
     if lang == "CN":
         indicators = {
             "Real GDP Growth (实际GDP)": "A191RL1Q225SBEA", 
-            "CPI (消费者物价)": "CPIAUCSL",
+            "CPI (消费者物价)": "CPIAUCNS",
             "PCE (名义PCE)": "PCEPI",          
             "Core PCE (核心PCE)": "PCEPILFE", 
             "Unemployment Rate (失业率)": "UNRATE",
@@ -489,7 +489,7 @@ def get_macro_hard_data(lang="CN"):
     else:
         indicators = {
             "Real GDP Growth": "A191RL1Q225SBEA", 
-            "CPI (Consumer Price Index)": "CPIAUCSL",
+            "CPI (Consumer Price Index)": "CPIAUCNS",
             "PCE (PCE Price Index)": "PCEPI",          
             "Core PCE (Fed's Favorite)": "PCEPILFE", 
             "Unemployment Rate": "UNRATE",
